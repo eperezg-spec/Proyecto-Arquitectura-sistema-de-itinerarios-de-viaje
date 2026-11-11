@@ -1,0 +1,17 @@
+# Compose PROPIO del API Gateway (nginx) + frontend estático.
+# Necesita los servicios internos: úsalo desde el docker-compose.yml de la raíz.
+name: gateway
+
+services:
+  gateway:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../frontend:/usr/share/nginx/html:ro
+    restart: on-failure
+
+networks:
+  default:
+    name: itinerario-net

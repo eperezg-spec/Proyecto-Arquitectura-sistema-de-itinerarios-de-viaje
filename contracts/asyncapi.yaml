@@ -1,0 +1,102 @@
+asyncapi: 3.0.0
+info:
+  title: Itinerary Events
+  version: 1.0.0
+  description: |
+    Contrato asíncrono entre el Itinerary Service (productor, vía Transactional Outbox)
+    y el componente Serverless de notificaciones (consumidor).
+    Garantía de entrega: at-least-once. El consumidor DEBE ser idempotente usando `event_id`.
+
+servers:
+  local:
+    host: rabbitmq:5672
+    protocol: amqp
+    description: RabbitMQ local (docker-compose)
+
+channels:
+  itineraryCreated:
+    address: itinerary.created
+    description: Routing key dentro del exchange topic `itinerary.events`.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: itinerary.events
+          type: topic
+          durable: true
+          autoDelete: false
+          vhost: /
+    messages:
+      ItineraryCreatedEvent:
+        $ref: '#/components/messages/ItineraryCreatedEvent'
+
+  notificationsQueue:
+    address: notifications.itinerary-created
+    description: Cola del consumidor. Mensajes fallidos van a `notifications.dead-letter` (DLX `itinerary.events.dlx`).
+    bindings:
+      amqp:
+        is: queue
+        queue:
+          name: notifications.itinerary-created
+          durable: true
+          exclusive: false
+          autoDelete: false
+          vhost: /
+    messages:
+      ItineraryCreatedEvent:
+        $ref: '#/components/messages/ItineraryCreatedEvent'
+
+operations:
+  publishItineraryCreated:
+    action: send
+    summary: El outbox-relay publica el evento cuando se crea un itinerario.
+    channel:
+      $ref: '#/channels/itineraryCreated'
+  consumeItineraryCreated:
+    action: receive
+    summary: El notification-connector consume la cola e invoca SendNotificationFunction.
+    channel:
+      $ref: '#/channels/notificationsQueue'
+
+components:
+  messages:
+    ItineraryCreatedEvent:
+      name: ItineraryCreatedEvent
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          traceparent:
+            type: string
+            description: Contexto W3C de la traza distribuida
+            example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+      payload:
+        $ref: '#/components/schemas/ItineraryCreatedPayload'
+
+  schemas:
+    ItineraryCreatedPayload:
+      type: object
+      required: [event_id, event_type, event_version, occurred_at, data]
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          const: itinerary.created
+        event_version:
+          type: integer
+          const: 1
+        occurred_at:
+          type: string
+          format: date-time
+        data:
+          type: object
+          required: [itinerary_id, user_name, departure_airport_id, arrival_airport_id, travel_date, duration_minutes]
+          properties:
+            itinerary_id: { type: string, format: uuid }
+            user_name: { type: string, example: Ana Gómez }
+            departure_airport_id: { type: integer, example: 1 }
+            arrival_airport_id: { type: integer, example: 3 }
+            travel_date: { type: string, format: date, example: '2027-03-15' }
+            duration_minutes: { type: integer, example: 55 }

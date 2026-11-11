@@ -1,0 +1,60 @@
+# Compose PROPIO del componente Serverless de notificaciones:
+#   LocalStack (simula AWS Lambda) + conector RabbitMQ->Lambda + su PostgreSQL + RabbitMQ.
+#   cd functions && docker compose up --build
+name: notification-functions
+
+services:
+  notification-connector:
+    build:
+      context: .
+      dockerfile: notification-connector/Dockerfile
+    image: itinerario/notification-connector:latest
+    environment:
+      RABBITMQ_URL: amqp://itinerario:itinerario@rabbitmq:5672/%2F
+      LOCALSTACK_URL: http://localstack:4566
+      FUNCTION_NAME: SendNotificationFunction
+      # Credenciales falsas: LocalStack no las valida
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      NOTIFICATION_DB_URL: postgresql+pg8000://notification_user:notification_pass@postgres:5432/notification_db
+      # Variables que recibe la Lambda (corre en otro contenedor, en la misma red)
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: notification_db
+      DB_USER: notification_user
+      DB_PASSWORD: notification_pass
+    restart: on-failure
+
+  localstack:
+    image: localstack/localstack:3.8.1
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: lambda
+      # La Lambda se ejecuta en un contenedor nuevo; debe unirse a nuestra red para ver a "postgres"
+      LAMBDA_DOCKER_NETWORK: itinerario-net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ../infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: itinerario
+      RABBITMQ_DEFAULT_PASS: itinerario
+
+networks:
+  default:
+    name: itinerario-net

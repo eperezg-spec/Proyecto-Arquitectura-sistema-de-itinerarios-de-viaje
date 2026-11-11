@@ -1,0 +1,56 @@
+# Compose PROPIO del Itinerary Service: API + outbox-relay + su PostgreSQL + RabbitMQ.
+#   cd services/itinerary-service && docker compose up --build
+# (Para validar aeropuertos necesita el Airport Service: usa el compose de la raíz.)
+name: itinerary-service
+
+services:
+  itinerary-service:
+    build: .
+    image: itinerario/itinerary-service:latest
+    ports:
+      - "8002:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://itinerary_user:itinerary_pass@postgres:5432/itinerary_db
+      AIRPORT_SERVICE_URL: http://airport-service:8000
+      JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto-en-produccion}
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Proceso que publica en RabbitMQ los eventos de la tabla outbox (misma imagen, otro comando)
+  outbox-relay:
+    image: itinerario/itinerary-service:latest
+    build: .
+    command: ["python", "-m", "app.infrastructure.outbox_relay"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://itinerary_user:itinerary_pass@postgres:5432/itinerary_db
+      RABBITMQ_URL: amqp://itinerario:itinerario@rabbitmq:5672/%2F
+    restart: on-failure
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - ../../infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: itinerario
+      RABBITMQ_DEFAULT_PASS: itinerario
+    ports:
+      - "15672:15672"
+
+networks:
+  default:
+    name: itinerario-net

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Itinerarios de viaje</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Plotly JS para el mapa interactivo -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>✈️ Itinerarios de viaje</h1>
+    <span id="session"></span>
+  </header>
+
+  <!-- Login: obtiene un JWT del auth-service a través del gateway -->
+  <section id="login-section" class="card">
+    <h2>Iniciar sesión</h2>
+    <form id="login-form">
+      <label>Usuario <input name="username" value="viajero" required></label>
+      <label>Contraseña <input name="password" type="password" value="viajero123" required></label>
+      <button type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <main id="app" hidden>
+    <div id="message" class="message" hidden></div>
+
+    <section class="card">
+      <h2>Mapa de aeropuertos</h2>
+      <p class="hint">Datos servidos por el Airport Service (nunca se llama a API Colombia desde aquí). Haz clic en un aeropuerto para ver su detalle.</p>
+      <div id="map"></div>
+      <div id="airport-detail" class="hint"></div>
+    </section>
+
+    <section class="card">
+      <h2 id="form-title">Nuevo itinerario</h2>
+      <form id="itinerary-form">
+        <input type="hidden" name="id">
+        <label>Nombre del usuario <input name="user_name" required maxlength="100"></label>
+        <label>Aeropuerto de salida <select name="departure_airport_id" required></select></label>
+        <label>Aeropuerto de llegada <select name="arrival_airport_id" required></select></label>
+        <label>Fecha de viaje <input name="travel_date" type="date" required></label>
+        <label>Duración (minutos) <input name="duration_minutes" type="number" min="1" required></label>
+        <div class="actions">
+          <button type="submit">Guardar</button>
+          <button type="button" id="cancel-edit" class="secondary" hidden>Cancelar edición</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Mis itinerarios</h2>
+      <table>
+        <thead>
+          <tr><th>Usuario</th><th>Salida</th><th>Llegada</th><th>Fecha</th><th>Duración</th><th></th></tr>
+        </thead>
+        <tbody id="itinerary-rows"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

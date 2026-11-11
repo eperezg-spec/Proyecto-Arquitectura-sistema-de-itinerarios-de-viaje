@@ -1,0 +1,72 @@
+# Integración continua: se ejecuta en cada Pull Request y en cada push a develop/main.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+
+jobs:
+  test:
+    name: Pruebas ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - services/airport-service
+          - services/itinerary-service
+          - services/auth-service
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest --cov=app --cov-report=xml --cov-report=term
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ strategy.job-index }}
+          path: ${{ matrix.service }}/coverage.xml
+
+  test-functions:
+    name: Pruebas Lambda
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pytest-cov
+      - working-directory: functions/send-notification
+        run: pytest tests --cov=. --cov-report=xml
+
+  sonar:
+    name: SonarQube
+    needs: [test]
+    runs-on: ubuntu-latest
+    # Para activarlo: variable de repo SONAR_ENABLED=true + secretos SONAR_TOKEN y SONAR_HOST_URL
+    # (por ejemplo con SonarCloud, gratuito para repos públicos)
+    if: ${{ vars.SONAR_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: coverage
+      - uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  docker-build:
+    name: Build de imágenes Docker
+    needs: [test, test-functions]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build

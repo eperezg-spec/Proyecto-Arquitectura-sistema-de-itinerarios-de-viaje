@@ -1,0 +1,35 @@
+# Compose PROPIO del Airport Service: lo levanta solo, con su Redis.
+#   cd services/airport-service && docker compose up --build
+# El docker-compose.yml de la raíz reutiliza este servicio con "extends".
+name: airport-service
+
+services:
+  airport-service:
+    build: .
+    image: itinerario/airport-service:latest
+    ports:
+      - "8001:8000"
+    environment:
+      API_COLOMBIA_URL: ${API_COLOMBIA_URL:-https://api-colombia.com}
+      REDIS_URL: redis://redis:6379/0
+      CACHE_TTL_SECONDS: "3600"
+      CB_FAILURE_THRESHOLD: "5"
+      CB_RESET_TIMEOUT_SECONDS: "30"
+      JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto-en-produccion}
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+networks:
+  default:
+    name: itinerario-net

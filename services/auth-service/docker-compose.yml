@@ -1,0 +1,22 @@
+# Compose PROPIO del Auth Service.  cd services/auth-service && docker compose up --build
+name: auth-service
+
+services:
+  auth-service:
+    build: .
+    image: itinerario/auth-service:latest
+    ports:
+      - "8003:8000"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto-en-produccion}
+      TOKEN_MINUTES: "60"
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  default:
+    name: itinerario-net

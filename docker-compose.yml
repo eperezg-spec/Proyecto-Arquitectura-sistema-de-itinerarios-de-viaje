@@ -1,0 +1,118 @@
+# =============================================================================
+#  SISTEMA COMPLETO:   docker compose up -d --build
+#
+#  Cada servicio tiene su propio docker-compose.yml en su carpeta; aquí se
+#  reutilizan con "extends" y se agrega la infraestructura compartida.
+#
+#  URLs:
+#    Frontend + API Gateway ..... http://localhost:8080   (usuario: viajero / viajero123)
+#    Swagger Airport ............ http://localhost:8001/docs
+#    Swagger Itinerary .......... http://localhost:8002/docs
+#    Swagger Auth ............... http://localhost:8003/docs
+#    RabbitMQ (itinerario/itinerario) http://localhost:15672
+#    Jaeger (trazas) ............ http://localhost:16686
+# =============================================================================
+name: itinerario
+
+x-otel: &otel
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+
+services:
+  # ---------------------------------------------------------------- Infra
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: itinerario
+      RABBITMQ_DEFAULT_PASS: itinerario
+    ports:
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+
+  localstack:
+    extends: { file: functions/docker-compose.yml, service: localstack }
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+
+  # ------------------------------------------------------- Microservicios
+  auth-service:
+    extends: { file: services/auth-service/docker-compose.yml, service: auth-service }
+
+  airport-service:
+    extends: { file: services/airport-service/docker-compose.yml, service: airport-service }
+    environment: *otel
+    depends_on:
+      redis: { condition: service_healthy }
+
+  itinerary-service:
+    extends: { file: services/itinerary-service/docker-compose.yml, service: itinerary-service }
+    environment: *otel
+    depends_on:
+      postgres: { condition: service_healthy }
+      airport-service: { condition: service_started }
+
+  outbox-relay:
+    extends: { file: services/itinerary-service/docker-compose.yml, service: outbox-relay }
+    depends_on:
+      itinerary-service: { condition: service_healthy } # espera a que corran las migraciones
+      rabbitmq: { condition: service_healthy }
+
+  # ----------------------------------------------------------- Serverless
+  notification-connector:
+    extends: { file: functions/docker-compose.yml, service: notification-connector }
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  # ------------------------------------------------- Gateway + Frontend
+  gateway:
+    extends: { file: gateway/docker-compose.yml, service: gateway }
+    depends_on:
+      - auth-service
+      - airport-service
+      - itinerary-service
+
+  # ------------------------------------------- Calidad (opcional, pesado)
+  #   docker compose --profile quality up -d sonarqube   ->  http://localhost:9000
+  sonarqube:
+    image: sonarqube:10.7.0-community
+    profiles: ["quality"]
+    ports:
+      - "9000:9000"
+
+volumes:
+  pgdata:
+
+networks:
+  default:
+    name: itinerario-net

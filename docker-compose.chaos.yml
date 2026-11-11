@@ -1,0 +1,15 @@
+# DEMO DE RESILIENCIA: simula que API Colombia se cae.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d airport-service
+#
+# El Airport Service apunta a un host que no existe -> los reintentos fallan ->
+# el circuit breaker se abre -> se sirve la copia "stale" de Redis (fallback)
+# o se responde 503 si no hay copia. Para volver a la normalidad:
+#
+#   docker compose up -d airport-service
+services:
+  airport-service:
+    environment:
+      API_COLOMBIA_URL: http://api-colombia-caida.invalid
+      CB_FAILURE_THRESHOLD: "3"
+      CB_RESET_TIMEOUT_SECONDS: "20"

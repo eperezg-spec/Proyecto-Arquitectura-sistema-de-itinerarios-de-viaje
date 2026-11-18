@@ -1,0 +1,39 @@
+// =============================================================================
+//  CONTRATO gRPC interno: Itinerary Service  --->  Airport Service
+//
+//  ¿Por qué gRPC y no REST para esta llamada?
+//    - Es comunicación INTERNA servicio-a-servicio (el navegador no la usa).
+//    - Contrato tipado y versionado (este archivo) del que se GENERA el código
+//      cliente y servidor: si alguien cambia un campo, el build lo detecta.
+//    - HTTP/2 + Protobuf binario: menos bytes y menos latencia que JSON.
+//    - El canal va cifrado y autenticado en ambos sentidos con mTLS.
+//
+//  Para regenerar el código Python después de editar este archivo:
+//      python scripts/generate_grpc.py
+// =============================================================================
+syntax = "proto3";
+
+package airport.v1;
+
+service AirportService {
+  // Devuelve un aeropuerto por su id.
+  //   NOT_FOUND    -> el aeropuerto no existe en API Colombia
+  //   UNAVAILABLE  -> API Colombia caída y sin copia en caché
+  rpc GetAirport(GetAirportRequest) returns (Airport);
+}
+
+message GetAirportRequest {
+  int32 id = 1;
+}
+
+message Airport {
+  int32 id = 1;
+  string name = 2;
+  string iata_code = 3;
+  string city = 4;
+  string department = 5;
+  // proto3 no tiene "null": has_coordinates indica si latitude/longitude son válidas
+  bool has_coordinates = 6;
+  double latitude = 7;
+  double longitude = 8;
+}

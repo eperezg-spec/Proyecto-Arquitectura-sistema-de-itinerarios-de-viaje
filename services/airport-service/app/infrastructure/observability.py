@@ -58,13 +58,22 @@ def setup_logging(service_name: str) -> None:
     logging.getLogger("pika").setLevel(logging.WARNING)
 
 
-def add_request_logging(app: FastAPI) -> None:
-    """Middleware que escribe un log JSON por cada petición HTTP."""
+def add_request_logging(app: FastAPI, service_name: str) -> None:
+    """Middleware que escribe un log JSON y registra métricas Prometheus por cada petición HTTP."""
+    from app.infrastructure.metrics import HTTP_LATENCY, HTTP_REQUESTS
 
     @app.middleware("http")
     async def log_request(request: Request, call_next):
         start = time.perf_counter()
         response = await call_next(request)
+        elapsed = time.perf_counter() - start
+        # Usamos la PLANTILLA de la ruta (/api/v1/airports/{airport_id}) y no la URL real,
+        # para no crear una serie de métricas distinta por cada id.
+        route = request.scope.get("route")
+        path = getattr(route, "path", "sin-ruta")
+        if path != "/metrics":
+            HTTP_REQUESTS.labels(service_name, request.method, path, str(response.status_code)).inc()
+            HTTP_LATENCY.labels(service_name, request.method, path).observe(elapsed)
         logger.info(
             "request",
             extra={
@@ -72,7 +81,7 @@ def add_request_logging(app: FastAPI) -> None:
                     "method": request.method,
                     "path": request.url.path,
                     "status": response.status_code,
-                    "duration_ms": round((time.perf_counter() - start) * 1000, 1),
+                    "duration_ms": round(elapsed * 1000, 1),
                     "request_id": request.headers.get("x-request-id"),
                 }
             },
@@ -88,6 +97,7 @@ def setup_tracing(app: FastAPI, service_name: str) -> None:
 
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.grpc import GrpcInstrumentorServer
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
@@ -99,3 +109,4 @@ def setup_tracing(app: FastAPI, service_name: str) -> None:
 
     FastAPIInstrumentor.instrument_app(app)  # crea un span por cada petición entrante
     HTTPXClientInstrumentor().instrument()  # propaga el contexto (header traceparent) en llamadas salientes
+    GrpcInstrumentorServer().instrument()  # crea un span por cada llamada gRPC entrante

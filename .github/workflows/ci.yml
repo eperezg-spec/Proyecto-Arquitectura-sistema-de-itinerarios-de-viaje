@@ -1,20 +1,34 @@
-# Integración continua: se ejecuta en cada Pull Request y en cada push a develop/main.
+# =============================================================================
+#  INTEGRACIÓN CONTINUA: se ejecuta en cada Pull Request y en cada push a
+#  develop / main / pruebas. Si algún job falla, el PR no se debe mergear.
+#
+#   test ──────────┐
+#   test-functions ┼─> pact (contrato consumidor -> proveedor)
+#   grpc-contract  │
+#   k8s-manifests  ┴─> docker-build ─> web-y-carga (Selenium + Locust sobre el sistema real)
+#   sonar (opcional)
+# =============================================================================
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [develop, main]
+    branches: [develop, main, pruebas]
+
+env:
+  PACT_DO_NOT_TRACK: "true"
 
 jobs:
+  # ----------------------------------------------------- pruebas unitarias
   test:
     name: Pruebas ${{ matrix.service }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         service:
           - services/airport-service
-          - services/itinerary-service
+          - services/itinerary-service   # incluye eventos con RabbitMQ real (Testcontainers)
           - services/auth-service
     defaults:
       run:
@@ -26,11 +40,14 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements-dev.txt
-      - run: pytest --cov=app --cov-report=xml --cov-report=term
+      - run: pytest -v --cov=app --cov-report=xml --cov-report=term --junitxml=junit.xml
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: coverage-${{ strategy.job-index }}
-          path: ${{ matrix.service }}/coverage.xml
+          name: resultados-${{ strategy.job-index }}
+          path: |
+            ${{ matrix.service }}/coverage.xml
+            ${{ matrix.service }}/junit.xml
 
   test-functions:
     name: Pruebas Lambda
@@ -40,10 +57,109 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install pytest pytest-cov
       - working-directory: functions/send-notification
-        run: pytest tests --cov=. --cov-report=xml
+        run: |
+          pip install -r requirements-dev.txt
+          pytest tests -v --cov=. --cov-report=xml
 
+  # ------------------------------------------- contrato del evento (Pact)
+  pact:
+    name: Contrato Pact (Lambda -> Itinerary)
+    needs: [test, test-functions]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 1) Consumidor genera el contrato
+        working-directory: functions/send-notification
+        run: |
+          pip install -r requirements-dev.txt
+          pytest tests/test_pact_consumer.py -v
+      - name: 2) Proveedor verifica el contrato recién generado
+        working-directory: services/itinerary-service
+        run: |
+          pip install -r requirements-dev.txt
+          pytest tests/test_pact_provider.py -v
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pact
+          path: contracts/pacts/
+
+  # ------------------------------------------- contrato gRPC al día
+  grpc-contract:
+    name: Código gRPC generado al día
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install grpcio-tools==1.85.3
+      - run: python scripts/generate_grpc.py
+      - name: Si alguien cambió airport.proto sin regenerar, falla
+        run: git diff --exit-code -- services/*/app/grpc_stubs
+
+  # ------------------------------------------- manifiestos de Kubernetes
+  k8s-manifests:
+    name: Validar manifiestos Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: kubectl kustomize k8s/base > k8s-render.yaml
+      - name: kubeconform (esquemas oficiales de Kubernetes)
+        run: |
+          docker run --rm -v "$PWD:/w" ghcr.io/yannh/kubeconform:v0.6.7 \
+            -summary -strict -ignore-missing-schemas /w/k8s-render.yaml /w/k8s/chaos
+
+  # ------------------------------------------- build de imágenes
+  docker-build:
+    name: Build de imágenes Docker
+    needs: [test, test-functions, grpc-contract, k8s-manifests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose build
+
+  # ------------------------------ pruebas web (Selenium) y carga (Locust)
+  web-y-carga:
+    name: Selenium + Locust sobre el sistema levantado
+    needs: [docker-build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Levantar el sistema + navegador
+        run: |
+          # vault-init, postgres, redis... arrancan solos como dependencias
+          docker compose --profile tests up -d --build --wait \
+            auth-service airport-service itinerary-service selenium
+          docker compose up -d gateway
+      - name: Pruebas web (Selenium)
+        run: |
+          pip install -r tests/web/requirements.txt
+          pytest tests/web -v --junitxml=junit-web.xml
+      - name: Carga corta (Locust, 30 s)
+        run: |
+          pip install locust
+          LOCUST_CODES_FILE=codigos.json locust -f tests/load/locustfile.py --host http://localhost:8080 \
+            --headless -u 5 -r 1 -t 30s --only-summary --exit-code-on-error 1 --csv carga
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidencias-web-y-carga
+          path: |
+            docs/pruebas/evidencias/
+            junit-web.xml
+            carga_stats.csv
+            codigos.json
+      - if: always()
+        run: docker compose --profile tests down -v
+
+  # ------------------------------------------- SonarQube (opcional)
   sonar:
     name: SonarQube
     needs: [test]
@@ -62,11 +178,3 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-  docker-build:
-    name: Build de imágenes Docker
-    needs: [test, test-functions]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker compose build

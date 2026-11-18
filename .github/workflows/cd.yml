@@ -1,6 +1,13 @@
-# Despliegue continuo de EJEMPLO: al crear un tag vX.Y.Z (o merge a main)
-#   1) construye y publica las imágenes en GitHub Container Registry (ghcr.io)
-#   2) "despliega" levantando el sistema completo en el runner y corre un smoke test
+# =============================================================================
+#  DESPLIEGUE CONTINUO: al hacer merge a main (o crear un tag vX.Y.Z)
+#
+#   publish ──┬──> deploy-compose   (ambiente de pruebas con Docker Compose + smoke test)
+#             └──> deploy-k8s       (clúster Kubernetes efímero con kind + smoke test)
+#
+#  1) Construye y publica las imágenes en GitHub Container Registry (ghcr.io),
+#     etiquetadas con el SHA del commit (trazabilidad) y "latest".
+#  2) Despliega en dos ambientes de prueba y verifica con un smoke test.
+# =============================================================================
 name: CD
 
 on:
@@ -21,6 +28,7 @@ jobs:
           - { name: airport-service, context: services/airport-service, dockerfile: services/airport-service/Dockerfile }
           - { name: itinerary-service, context: services/itinerary-service, dockerfile: services/itinerary-service/Dockerfile }
           - { name: auth-service, context: services/auth-service, dockerfile: services/auth-service/Dockerfile }
+          - { name: gateway, context: ., dockerfile: gateway/Dockerfile }
           - { name: notification-connector, context: functions, dockerfile: functions/notification-connector/Dockerfile }
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +46,8 @@ jobs:
             ghcr.io/${{ github.repository }}/${{ matrix.name }}:${{ github.sha }}
             ghcr.io/${{ github.repository }}/${{ matrix.name }}:latest
 
-  deploy-demo:
+  # ---------------------------------------- ambiente 1: Docker Compose
+  deploy-compose:
     needs: publish
     runs-on: ubuntu-latest
     steps:
@@ -46,10 +55,31 @@ jobs:
       - name: Desplegar (docker compose)
         run: docker compose up -d --build --wait auth-service airport-service itinerary-service gateway
       - name: Smoke test
-        run: |
-          TOKEN=$(curl -sf -X POST http://localhost:8080/auth/token -H 'Content-Type: application/json' \
-            -d '{"username":"viajero","password":"viajero123"}' | python -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')
-          curl -sf http://localhost:8080/api/v1/itineraries -H "Authorization: Bearer $TOKEN"
-          echo "Smoke test OK"
+        run: bash scripts/smoke_test.sh http://localhost:8080
       - if: always()
         run: docker compose down -v
+
+  # ---------------------------------------- ambiente 2: Kubernetes (kind)
+  deploy-k8s:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: itinerario
+      - name: Construir y cargar las imágenes en el clúster
+        run: |
+          docker compose build auth-service airport-service itinerary-service gateway
+          for s in auth-service airport-service itinerary-service gateway; do
+            kind load docker-image itinerario/$s:latest --name itinerario
+          done
+      - name: Desplegar (k8s/deploy.sh)
+        run: bash k8s/deploy.sh
+      - name: Smoke test
+        run: |
+          kubectl -n itinerario port-forward svc/gateway 8080:80 &
+          sleep 5
+          bash scripts/smoke_test.sh http://localhost:8080
+      - if: failure()
+        run: kubectl -n itinerario get pods && kubectl -n itinerario logs -l app=itinerary-service --tail=50

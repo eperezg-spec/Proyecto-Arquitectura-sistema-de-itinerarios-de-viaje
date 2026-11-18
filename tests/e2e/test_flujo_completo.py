@@ -5,10 +5,13 @@ completo y al final destruye el entorno.
   pip install -r tests/e2e/requirements.txt
   pytest tests/e2e -v -s          (tarda varios minutos la primera vez)
 
+Si el puerto 5432 está ocupado: POSTGRES_PORT=5434 pytest tests/e2e -v -s
+
 Flujo verificado:
-  login -> mapa -> crear itinerario (valida aeropuertos vía HTTP) ->
+  login -> mapa -> crear itinerario (valida aeropuertos vía gRPC + mTLS) ->
   outbox -> RabbitMQ -> Lambda -> fila en notification_db
 """
+import os
 import time
 from datetime import date, timedelta
 from pathlib import Path
@@ -20,6 +23,7 @@ from testcontainers.compose import DockerCompose
 
 ROOT = Path(__file__).resolve().parents[2]
 GATEWAY = "http://localhost:8080"
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 
 
 def wait_until(check, timeout: int, message: str):
@@ -78,7 +82,7 @@ def test_crear_itinerario_genera_notificacion(system):
 
     # 4. La notificación llega a notification_db (asíncrono: RabbitMQ -> Lambda)
     def notification_saved():
-        with psycopg.connect("postgresql://notification_user:notification_pass@localhost:5432/notification_db") as conn:
+        with psycopg.connect(f"postgresql://notification_user:notification_pass@localhost:{POSTGRES_PORT}/notification_db") as conn:
             row = conn.execute("SELECT status FROM notifications WHERE itinerary_id = %s", (created["id"],)).fetchone()
             return row and row[0] == "SENT"
 

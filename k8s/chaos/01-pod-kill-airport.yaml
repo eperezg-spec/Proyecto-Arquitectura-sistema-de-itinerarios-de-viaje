@@ -1,0 +1,23 @@
+# =============================================================================
+#  EXPERIMENTO 1 (Chaos Mesh) - Matar un pod del Airport Service
+#
+#  Hipótesis: con 2 réplicas y readinessProbe, si un pod muere el Service
+#  envía el tráfico a la otra réplica y Kubernetes crea un pod nuevo.
+#  El usuario NO debe ver errores.
+#
+#  Ejecutar:  kubectl apply -f k8s/chaos/01-pod-kill-airport.yaml
+#  Observar:  kubectl get pods -n itinerario -l app=airport-service -w
+#  Validar:   el mapa sigue cargando en http://localhost:30080
+# =============================================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: matar-pod-airport
+  namespace: itinerario
+spec:
+  action: pod-kill
+  mode: one                 # un pod al azar de los que cumplan el selector
+  selector:
+    namespaces: [itinerario]
+    labelSelectors:
+      app: airport-service

@@ -1,0 +1,7 @@
+# Todo el sistema vive en su propio namespace (aislamiento lógico dentro del clúster)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: itinerario
+  labels:
+    app.kubernetes.io/part-of: itinerario

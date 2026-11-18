@@ -1,0 +1,129 @@
+{
+  "consumer": {
+    "name": "send-notification-function"
+  },
+  "interactions": [
+    {
+      "contents": {
+        "content": {
+          "data": {
+            "arrival_airport_id": 2,
+            "departure_airport_id": 1,
+            "duration_minutes": 60,
+            "itinerary_id": "6f1c1f1e-0000-4000-8000-0000000000aa",
+            "travel_date": "2026-12-01",
+            "user_name": "Ana Gómez"
+          },
+          "event_id": "6f1c1f1e-0000-4000-8000-000000000001",
+          "event_type": "itinerary.created",
+          "event_version": 1,
+          "occurred_at": "2026-11-11T10:00:00+00:00"
+        },
+        "contentType": "application/json",
+        "encoded": false
+      },
+      "description": "un evento ItineraryCreated",
+      "matchingRules": {
+        "body": {
+          "$.data.arrival_airport_id": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          },
+          "$.data.departure_airport_id": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          },
+          "$.data.duration_minutes": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          },
+          "$.data.itinerary_id": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "^([0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12})$"
+              }
+            ]
+          },
+          "$.data.travel_date": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "format": "yyyy-MM-dd",
+                "match": "date"
+              }
+            ]
+          },
+          "$.data.user_name": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          },
+          "$.event_id": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "^([0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12})$"
+              }
+            ]
+          },
+          "$.event_version": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          },
+          "$.occurred_at": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "contentType": "application/json"
+      },
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "se creó un itinerario"
+        }
+      ],
+      "type": "Asynchronous/Messages"
+    }
+  ],
+  "metadata": {
+    "pactRust": {
+      "ffi": "0.5.12",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "itinerary-service"
+  }
+}

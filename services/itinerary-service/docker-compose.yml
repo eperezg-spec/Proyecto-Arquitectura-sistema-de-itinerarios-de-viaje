@@ -11,6 +11,9 @@ services:
       - "8002:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://itinerary_user:itinerary_pass@postgres:5432/itinerary_db
+      # Validación de aeropuertos: gRPC (por defecto) o http
+      AIRPORT_TRANSPORT: grpc
+      AIRPORT_GRPC_TARGET: airport-service:50051
       AIRPORT_SERVICE_URL: http://airport-service:8000
       JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto-en-produccion}
     restart: on-failure
@@ -29,6 +32,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://itinerary_user:itinerary_pass@postgres:5432/itinerary_db
       RABBITMQ_URL: amqp://itinerario:itinerario@rabbitmq:5672/%2F
+      METRICS_PORT: "9100"
     restart: on-failure
 
   postgres:

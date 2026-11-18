@@ -29,3 +29,20 @@ def get_airport_service() -> AirportService:
     redis_client = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True)
     cached = CachedAirportProvider(adapter, redis_client, ttl_seconds=int(os.getenv("CACHE_TTL_SECONDS", "3600")))
     return AirportService(cached)
+
+
+def start_grpc_server():
+    """Arranca el servidor gRPC interno (lo llama el lifespan de main.py).
+
+    Con Vault: pide un certificado para "airport-service" y exige mTLS.
+    Sin Vault: servidor sin TLS (solo para desarrollo/pruebas).
+    """
+    from app.api.grpc_server import AirportGrpcService, create_grpc_server
+    from app.infrastructure.vault import issue_certificate
+
+    tls = issue_certificate(os.getenv("SERVICE_CN", "airport-service"))
+    allowed = {name.strip() for name in os.getenv("GRPC_ALLOWED_CLIENTS", "itinerary-service").split(",")}
+    servicer = AirportGrpcService(get_airport_service, allowed_clients=allowed if tls else None)
+    server, _ = create_grpc_server(servicer, port=int(os.getenv("GRPC_PORT", "50051")), tls=tls)
+    server.start()
+    return server

@@ -20,6 +20,7 @@ import redis
 from app.application.ports import AirportProvider
 from app.domain.exceptions import AirportProviderUnavailable
 from app.domain.models import Airport
+from app.infrastructure.metrics import CACHE_EVENTS
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -69,9 +70,11 @@ class CachedAirportProvider(AirportProvider):
         cached = self._read(FRESH_PREFIX + key)
         if cached is not None:
             logger.info("Cache HIT", extra={"extra_fields": {"key": key}})
+            CACHE_EVENTS.labels("hit").inc()
             return from_json(json.loads(cached))
 
         logger.info("Cache MISS", extra={"extra_fields": {"key": key}})
+        CACHE_EVENTS.labels("miss").inc()
         try:
             value = loader()
         except AirportProviderUnavailable:
@@ -80,6 +83,7 @@ class CachedAirportProvider(AirportProvider):
             if stale is None:
                 raise
             logger.warning("Fallback: se sirve la copia stale de la caché", extra={"extra_fields": {"key": key}})
+            CACHE_EVENTS.labels("stale").inc()
             return from_json(json.loads(stale))
 
         payload = json.dumps(to_json(value), ensure_ascii=False)

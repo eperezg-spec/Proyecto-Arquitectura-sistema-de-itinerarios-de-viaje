@@ -11,3 +11,10 @@ opentelemetry-sdk>=1.27
 opentelemetry-exporter-otlp-proto-http>=1.27
 opentelemetry-instrumentation-fastapi>=0.48b0
 opentelemetry-instrumentation-httpx>=0.48b0
+opentelemetry-instrumentation-grpc>=0.48b0
+# gRPC: deben ser >= a la versión con la que se generó app/grpc_stubs
+grpcio>=1.85.3
+protobuf>=7.35.1
+# Vault (secretos + certificados mTLS) y métricas Prometheus
+hvac>=2.3
+prometheus-client>=0.21

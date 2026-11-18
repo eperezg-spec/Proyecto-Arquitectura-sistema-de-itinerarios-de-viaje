@@ -1,11 +1,12 @@
 """Validación del JWT emitido por el auth-service (secreto compartido HS256)."""
-import os
-
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-JWT_SECRET = os.getenv("JWT_SECRET", "cambia-este-secreto-en-produccion")
+from app.infrastructure.vault import get_secret
+
+# Con Vault se lee de secret/itinerario/jwt; sin Vault, de la variable JWT_SECRET.
+JWT_SECRET = get_secret("itinerario/jwt", "secret", env_var="JWT_SECRET", default="cambia-este-secreto-en-produccion")
 JWT_ALGORITHM = "HS256"
 
 # auto_error=False para devolver nuestro propio mensaje de error (401).

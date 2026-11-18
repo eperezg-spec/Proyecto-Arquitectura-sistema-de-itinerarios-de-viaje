@@ -21,17 +21,19 @@ import time
 from datetime import datetime, timezone
 
 import pika
-from sqlalchemy import select
+from prometheus_client import start_http_server
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.messaging import EXCHANGE, declare_topology
+from app.infrastructure.metrics import OUTBOX_PENDING, OUTBOX_PUBLISHED
 from app.infrastructure.orm import OutboxMessageRow
 
 logger = logging.getLogger("outbox-relay")
 
 BATCH_SIZE = 50
 POLL_INTERVAL_SECONDS = float(os.getenv("OUTBOX_POLL_INTERVAL_SECONDS", "1"))
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/%2F")
+METRICS_PORT = int(os.getenv("METRICS_PORT", "9100"))
 
 
 def publish_pending(session_factory: sessionmaker[Session], channel) -> int:
@@ -59,21 +61,34 @@ def publish_pending(session_factory: sessionmaker[Session], channel) -> int:
                 ),
             )
             message.published_at = datetime.now(timezone.utc)
+            OUTBOX_PUBLISHED.labels(message.event_type).inc()
             logger.info(
                 "Evento publicado",
                 extra={"extra_fields": {"event_id": str(message.id), "event_type": message.event_type}},
             )
+        # Cuántos quedan pendientes (lo vigila la alerta "OutboxAtascado"). El autoflush de la
+        # sesión ya envió los published_at de este lote, así que no se cuentan.
+        pending = session.scalar(
+            select(func.count()).select_from(OutboxMessageRow).where(OutboxMessageRow.published_at.is_(None))
+        )
+        OUTBOX_PENDING.set(pending or 0)
         return len(messages)
 
 
 def main() -> None:
     from app.infrastructure.database import SessionLocal
     from app.infrastructure.observability import setup_logging
+    from app.infrastructure.vault import get_secret
 
     setup_logging("outbox-relay")
+    rabbitmq_url = get_secret(
+        "itinerario/itinerary-service", "rabbitmq_url", env_var="RABBITMQ_URL",
+        default="amqp://guest:guest@localhost:5672/%2F",
+    )
+    start_http_server(METRICS_PORT)  # GET :9100/metrics para Prometheus
     while True:
         try:
-            connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
+            connection = pika.BlockingConnection(pika.URLParameters(rabbitmq_url))
             channel = connection.channel()
             declare_topology(channel)
             channel.confirm_delivery()  # publisher confirms

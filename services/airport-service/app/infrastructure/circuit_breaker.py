@@ -18,6 +18,8 @@ import time
 from enum import Enum
 from typing import Callable, TypeVar
 
+from app.infrastructure.metrics import CIRCUIT_STATE, CIRCUIT_VALUES
+
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
@@ -48,6 +50,7 @@ class CircuitBreaker:
         self._failures = 0
         self._opened_at = 0.0
         self.state = CircuitState.CLOSED
+        CIRCUIT_STATE.labels(name).set(0)  # métrica para Prometheus / alertas
 
     def call(self, func: Callable[..., T], *args, **kwargs) -> T:
         with self._lock:
@@ -84,3 +87,4 @@ class CircuitBreaker:
             extra={"extra_fields": {"circuit": self.name, "from": self.state.value, "to": new_state.value}},
         )
         self.state = new_state
+        CIRCUIT_STATE.labels(self.name).set(CIRCUIT_VALUES[new_state.value])

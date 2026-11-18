@@ -1,0 +1,28 @@
+%% C4 Nivel 1 - Diagrama de contexto del Sistema de Itinerarios
+flowchart LR
+  viajero(["👤 Viajero<br/><small>Planifica viajes entre<br/>aeropuertos de Colombia</small>"])
+  equipo(["👥 Equipo de desarrollo<br/><small>Opera, monitorea y despliega</small>"])
+
+  subgraph limite["Sistema de Itinerarios Personales"]
+    sistema["🧭 Sistema de Itinerarios<br/><small>Microservicios + eventos + serverless<br/>Mapa interactivo, CRUD de itinerarios,<br/>notificaciones asíncronas</small>"]
+  end
+
+  apicol[("🌐 API Colombia<br/><small>api-colombia.com<br/>Catálogo público de aeropuertos</small>")]
+  aws["☁️ AWS Lambda<br/><small>LocalStack en desarrollo<br/>Función de notificación</small>"]
+  gh["🐙 GitHub + GitHub Actions<br/><small>Código, PRs, CI/CD, GHCR</small>"]
+
+  viajero -- "Usa el navegador<br/>HTTP/JSON" --> sistema
+  sistema -- "Consulta aeropuertos REST/JSON<br/>caché + retry + circuit breaker" --> apicol
+  sistema -- "Invoca por cada<br/>ItineraryCreated" --> aws
+  equipo -- "Push / Pull Request" --> gh
+  gh -- "Construye, prueba<br/>y despliega" --> sistema
+  equipo -- "Dashboards, trazas<br/>y alertas" --> sistema
+
+  classDef persona fill:#cffafe,stroke:#0e7490,color:#0f172a
+  classDef sys fill:#dbeafe,stroke:#1d4ed8,stroke-width:3px,color:#0f172a
+  classDef ext fill:#f3f4f6,stroke:#4b5563,color:#111827
+  classDef fn fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  class viajero,equipo persona
+  class sistema sys
+  class apicol,gh ext
+  class aws fn

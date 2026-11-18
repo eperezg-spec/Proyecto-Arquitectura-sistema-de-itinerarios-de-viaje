@@ -1,0 +1,44 @@
+%% Procesos DevOps: integración continua y despliegue continuo (GitHub Actions)
+flowchart TB
+  subgraph plan["Planear"]
+    jira["Jira<br/><small>historias, épicas, estados</small>"]
+  end
+  subgraph code["Codificar"]
+    direction LR
+    br["Rama feature/*<br/><small>Git Flow: main · develop · pruebas</small>"]
+    pr["Pull Request<br/><small>plantilla + revisión de la compañera</small>"]
+  end
+  subgraph ci["CI · .github/workflows/ci.yml (cada PR y push)"]
+    direction LR
+    t1["Pruebas unitarias por servicio<br/><small>pytest + cobertura</small>"]
+    t2["Pruebas de eventos y contratos<br/><small>Pact consumidor → proveedor</small>"]
+    sq["SonarQube<br/><small>calidad + cobertura</small>"]
+    bd["docker compose build"]
+  end
+  subgraph cd["CD · .github/workflows/cd.yml (merge a main / tag v*)"]
+    direction LR
+    pub["Publicar imágenes<br/><small>ghcr.io</small>"]
+    dep["Desplegar ambiente demo<br/><small>docker compose up --wait</small>"]
+    smk["Smoke test<br/><small>login + listar itinerarios</small>"]
+  end
+  subgraph ops["Operar y monitorear"]
+    direction LR
+    mon["Prometheus · Grafana · Jaeger<br/>Alertmanager"]
+    qa["Selenium · Locust · Chaos Mesh<br/><small>pruebas no funcionales</small>"]
+  end
+
+  jira --> br --> pr --> t1 --> t2 --> sq --> bd
+  bd -->|merge| pub --> dep --> smk --> mon
+  mon -->|retroalimentación: bugs, mejoras| jira
+  qa -.-> mon
+
+  classDef p fill:#e0e7ff,stroke:#4338ca,color:#0f172a
+  classDef c fill:#cffafe,stroke:#0e7490,color:#0f172a
+  classDef i fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef d fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef o fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  class jira p
+  class br,pr c
+  class t1,t2,sq,bd i
+  class pub,dep,smk d
+  class mon,qa o

@@ -1,0 +1,51 @@
+clave,tipo,epica,resumen,responsable,estado,prioridad,sprint,fecha_inicio,fecha_limite,fecha_resolucion,etiquetas,entregable
+EP-01,Epic,,"Fundaciones DevOps (repo, Jira, CI)",Compartido,Done,Highest,S0,,,2026-11-11,devops,Repositorio + Jira + CI
+EP-02,Epic,,Airport Service (Nivel 1-2),Elizabeth Pérez González,Done,Highest,S1,,,2026-11-11,airport,Microservicio de aeropuertos
+EP-03,Epic,,Itinerary Service (Nivel 1-2),María Fernanda Ceballos,Done,Highest,S2,,,2026-11-11,itinerary,Microservicio de itinerarios
+EP-04,Epic,,Eventos y Serverless (Nivel 2),María Fernanda Ceballos,Done,High,S4,,,2026-11-11,eventos;serverless,Notificaciones asíncronas
+EP-05,Epic,,"Gateway, seguridad y frontend",Elizabeth Pérez González,Done,High,S3,,,2026-11-11,gateway;frontend,Gateway + JWT + UI
+EP-06,Epic,,Observabilidad y calidad,María Fernanda Ceballos,Done,High,S5,,,2026-11-11,observabilidad,Logs + trazas + Sonar
+EP-07,Epic,,Nivel 3 (correcciones del profesor),Compartido,In Review,High,S6,2026-11-18,,,nivel3;correcciones,gRPC mTLS Vault K8s Chaos Pact alertas
+EP-08,Epic,,Pruebas y aseguramiento de calidad (correcciones),Compartido,In Review,High,S6,2026-11-18,,,pruebas;correcciones,Rama pruebas + informe
+EP-09,Epic,,Documentación y entrega final,Compartido,In Review,High,S7,2026-11-18,,,documentacion;correcciones,Documentos finales
+ITIN-1,Task,EP-01,Crear repositorio Git con ramas main/develop/feature y plantilla de PR,Compartido,Done,Highest,S0,,,2026-11-11,devops;git,Repositorio
+ITIN-2,Task,EP-01,Configurar proyecto Jira con flujo To Do / In Design / In Review / Approved / Done,María Fernanda Ceballos,Done,High,S0,,,2026-11-11,devops;jira,Tablero Jira
+ITIN-3,Task,EP-01,Pipeline CI en GitHub Actions (pruebas por servicio + build de imágenes),María Fernanda Ceballos,Done,Highest,S0,,,2026-11-11,devops;ci,.github/workflows/ci.yml
+ITIN-4,Task,EP-01,docker-compose por servicio y compose raíz con extends,Elizabeth Pérez González,Done,High,S0,,,2026-11-11,devops;docker,docker-compose.yml
+ITIN-5,Story,EP-02,Adapter de API Colombia con DTO y traducción al modelo de dominio,Elizabeth Pérez González,Done,Highest,S1,,,2026-11-11,airport;adapter,api_colombia_adapter.py
+ITIN-6,Story,EP-02,"Corregir coordenadas invertidas y 0,0 de API Colombia en el Adapter",Elizabeth Pérez González,Done,High,S1,,,2026-11-11,airport;adapter,Mapa con 51 aeropuertos en Colombia
+ITIN-7,Story,EP-02,Mapa Plotly de aeropuertos (endpoint /map),Elizabeth Pérez González,Done,High,S1,,,2026-11-11,airport;plotly,GET /api/v1/airports/map
+ITIN-8,Story,EP-02,Caché Redis con copia fresca y copia stale de respaldo,Elizabeth Pérez González,Done,High,S3,,,2026-11-11,airport;resiliencia,redis_cache.py
+ITIN-9,Story,EP-02,Timeout + retry con backoff + circuit breaker hacia API Colombia,Elizabeth Pérez González,Done,High,S3,,,2026-11-11,airport;resiliencia,circuit_breaker.py
+ITIN-10,Story,EP-03,Agregado Itinerary con reglas de negocio y evento de dominio,María Fernanda Ceballos,Done,Highest,S2,,,2026-11-11,itinerary;ddd,domain/models.py
+ITIN-11,Story,EP-03,CRUD de itinerarios con validación de aeropuertos,María Fernanda Ceballos,Done,Highest,S2,,,2026-11-11,itinerary;api,/api/v1/itineraries
+ITIN-12,Story,EP-03,Migraciones Alembic (itineraries + outbox),María Fernanda Ceballos,Done,Medium,S2,,,2026-11-11,itinerary;bd,migrations/
+ITIN-13,Story,EP-04,Transactional Outbox + relay (FOR UPDATE SKIP LOCKED + publisher confirms),María Fernanda Ceballos,Done,High,S4,,,2026-11-11,eventos;outbox,outbox_relay.py
+ITIN-14,Story,EP-04,Topología RabbitMQ (topic exchange + DLX/DLQ) y contrato AsyncAPI,María Fernanda Ceballos,Done,High,S4,,,2026-11-11,eventos;asyncapi,contracts/asyncapi.yaml
+ITIN-15,Story,EP-04,Lambda SendNotificationFunction idempotente en LocalStack + conector,María Fernanda Ceballos,Done,High,S4,,,2026-11-11,serverless;lambda,functions/
+ITIN-16,Story,EP-05,API Gateway nginx con rate limiting y ruteo,Elizabeth Pérez González,Done,High,S3,,,2026-11-11,gateway,gateway/
+ITIN-17,Story,EP-05,Auth Service con JWT y propagación del token,Elizabeth Pérez González,Done,High,S3,,,2026-11-11,seguridad;jwt,services/auth-service
+ITIN-18,Story,EP-05,Frontend (login + mapa + CRUD + ruta),Elizabeth Pérez González,Done,Medium,S3,,,2026-11-11,frontend,frontend/
+ITIN-19,Story,EP-06,Logs JSON con trace_id y trazas distribuidas en Jaeger,María Fernanda Ceballos,Done,Medium,S5,,,2026-11-11,observabilidad;jaeger,observability.py
+ITIN-20,Task,EP-06,Swagger documentado en cada servicio,Compartido,Done,Medium,S5,,,2026-11-11,documentacion;swagger,/docs
+ITIN-21,Task,EP-06,SonarQube (perfil quality + job de CI),María Fernanda Ceballos,Done,Medium,S5,,,2026-11-11,calidad;sonar,sonar-project.properties
+ITIN-22,Task,EP-06,Revisión del avance en clase,Compartido,Approved,High,S5,,,2026-11-18,revision,Retroalimentación del profesor
+ITIN-23,Story,EP-07,Comunicación interna Itinerary -> Airport por gRPC (contrato .proto),Elizabeth Pérez González,Done,High,S6,2026-11-18,,2026-11-18,nivel3;grpc,contracts/proto/airport.proto
+ITIN-24,Story,EP-07,mTLS en el canal gRPC con autorización por CN del certificado,Elizabeth Pérez González,Done,High,S6,2026-11-18,,2026-11-18,nivel3;seguridad;mtls,grpc_server.py
+ITIN-25,Story,EP-07,HashiCorp Vault: secretos (KV) + CA interna (PKI) + políticas de mínimo privilegio,Elizabeth Pérez González,Done,High,S6,2026-11-18,,2026-11-18,nivel3;seguridad;vault,infra/vault/init.sh
+ITIN-26,Story,EP-07,Despliegue en Kubernetes (Deployments + HPA + probes + Job de migraciones),Elizabeth Pérez González,Done,High,S6,2026-11-18,,2026-11-18,nivel3;kubernetes,k8s/base
+ITIN-27,Story,EP-07,Experimentos de Chaos Mesh (pod-kill + latencia + partición),Elizabeth Pérez González,Done,Medium,S6,2026-11-18,,2026-11-18,nivel3;chaos,k8s/chaos
+ITIN-28,Story,EP-07,Pruebas de contrato Pact del evento ItineraryCreated,María Fernanda Ceballos,Done,High,S6,2026-11-18,,2026-11-18,nivel3;pact,contracts/pacts
+ITIN-29,Story,EP-07,Métricas Prometheus + 6 alertas + Alertmanager + dashboard Grafana,María Fernanda Ceballos,Done,High,S6,2026-11-18,,2026-11-18,nivel3;alertas,infra/monitoring
+ITIN-30,Story,EP-07,Mejora del circuit breaker detectada en caos (timeout por intento / estado compartido),Elizabeth Pérez González,In Design,Low,S7,2026-11-18,,,mejora;resiliencia,Propuesta en k8s/README.md
+ITIN-31,Task,EP-08,Pruebas funcionales con Pytest (unitarias + eventos de la arquitectura hexagonal),María Fernanda Ceballos,Done,Highest,S6,2026-11-18,,2026-11-18,pruebas;pytest,tests/ de cada servicio
+ITIN-32,Task,EP-08,Pruebas de eventos con RabbitMQ real (Testcontainers) incluida la DLQ,María Fernanda Ceballos,Done,High,S6,2026-11-18,,2026-11-18,pruebas;eventos,test_eventos_rabbitmq.py
+ITIN-33,Task,EP-08,Automatización web con Selenium (9 casos de prueba),Elizabeth Pérez González,Done,Highest,S6,2026-11-18,,2026-11-18,pruebas;selenium,tests/web
+ITIN-34,Task,EP-08,Pruebas de carga y estrés con Locust,María Fernanda Ceballos,Done,Highest,S6,2026-11-18,,2026-11-18,pruebas;locust,docs/pruebas/carga
+ITIN-35,Task,EP-08,Informe de pruebas en la rama pruebas,Compartido,In Review,Highest,S6,2026-11-18,,,pruebas;documentacion,docs/pruebas/informe-de-pruebas.md
+ITIN-36,Task,EP-09,Documento de arquitectura con diagramas mejorados (formato del ejemplo),Elizabeth Pérez González,In Review,Highest,S6,2026-11-18,,,documentacion;arquitectura,docs/arquitectura
+ITIN-37,Task,EP-09,README detallado: DDD + Adapter + eventos + flujo asíncrono + Double Write,María Fernanda Ceballos,In Review,High,S6,2026-11-18,,,documentacion;readme,README.md
+ITIN-38,Task,EP-09,Ciclo DevOps detallado por fases,María Fernanda Ceballos,In Review,High,S6,2026-11-18,,,documentacion;devops,docs/devops/ciclo-devops.md
+ITIN-39,Task,EP-09,Gestión en Jira vinculada por API (script de sincronización),María Fernanda Ceballos,In Review,High,S6,2026-11-18,,,documentacion;jira,jira/jira_sync.py
+ITIN-40,Task,EP-09,Roadmap y reparto ajustados a 2 integrantes,Compartido,In Review,Medium,S6,2026-11-18,,,documentacion;roadmap,docs/planning/10-roadmap.md
+ITIN-41,Task,EP-09,Sustentación final y demo,Compartido,To Do,Highest,S7,,,,entrega,Presentación

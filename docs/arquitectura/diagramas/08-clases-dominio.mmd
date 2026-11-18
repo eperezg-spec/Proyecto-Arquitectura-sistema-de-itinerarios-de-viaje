@@ -1,0 +1,69 @@
+%% Modelo de dominio (clases) de los dos contextos principales
+classDiagram
+  direction LR
+  namespace Planificacion_de_Viajes {
+    class Itinerary {
+      <<Aggregate Root>>
+      +UUID id
+      +str user_name
+      +int departure_airport_id
+      +int arrival_airport_id
+      +date travel_date
+      +int duration_minutes
+      +datetime created_at
+      +datetime updated_at
+      -list events
+      +create(...)$ Itinerary
+      +update(...) void
+      +pull_events() list
+      -_validate() void
+    }
+    class ItineraryCreated {
+      <<Domain Event>>
+      +UUID event_id
+      +UUID itinerary_id
+      +str user_name
+      +int departure_airport_id
+      +int arrival_airport_id
+      +date travel_date
+      +int duration_minutes
+      +datetime occurred_at
+    }
+    class ItineraryRepository {
+      <<Port>>
+      +add(itinerary)
+      +get(id)
+      +list(limit, offset)
+      +update(itinerary)
+      +delete(id) bool
+    }
+    class AirportChecker {
+      <<Port>>
+      +exists(airport_id) bool
+    }
+  }
+  namespace Catalogo_Aeroportuario {
+    class Airport {
+      <<Value Object>>
+      +int id
+      +str name
+      +str iata_code
+      +str oaci_code
+      +str airport_type
+      +str city
+      +str department
+      +float latitude
+      +float longitude
+    }
+    class AirportProvider {
+      <<Port>>
+      +get_by_id(id) Airport
+      +list_all() list
+      +invalidate_cache() int
+    }
+  }
+  Itinerary "1" *-- "0..*" ItineraryCreated : registra
+  Itinerary ..> AirportChecker : valida ids vía
+  Itinerary "0..*" ..> "2" Airport : referencia por ID (no contiene)
+  ItineraryRepository ..> Itinerary : persiste
+  AirportProvider ..> Airport : devuelve

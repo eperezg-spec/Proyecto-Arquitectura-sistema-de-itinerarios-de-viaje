@@ -1,0 +1,114 @@
+# Itinerary Service + su Job de migraciones + el outbox relay.
+#
+# Las migraciones (Alembic) se ejecutan UNA vez en un Job, no en cada réplica,
+# para que dos pods no intenten crear las tablas al mismo tiempo.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: itinerary-migrations
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrations
+          image: itinerario/itinerary-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: { name: itinerario-config }
+          env:
+            - name: VAULT_TOKEN
+              valueFrom: { secretKeyRef: { name: itinerario-infra, key: ITINERARY_VAULT_TOKEN } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: itinerary-service
+  labels: { app: itinerary-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: itinerary-service }
+  template:
+    metadata:
+      labels: { app: itinerary-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: itinerary-service
+          image: itinerario/itinerary-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports: [{ containerPort: 8000, name: http }]
+          envFrom:
+            - configMapRef: { name: itinerario-config }
+          env:
+            - name: VAULT_TOKEN
+              valueFrom: { secretKeyRef: { name: itinerario-infra, key: ITINERARY_VAULT_TOKEN } }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: itinerary-service
+spec:
+  selector: { app: itinerary-service }
+  ports: [{ port: 8000, name: http, targetPort: http }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: itinerary-service
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: itinerary-service }
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+---
+# Outbox relay: misma imagen, otro comando. Podría tener varias réplicas gracias
+# a FOR UPDATE SKIP LOCKED (dos réplicas nunca publican el mismo mensaje).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outbox-relay
+  labels: { app: outbox-relay }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: outbox-relay }
+  template:
+    metadata:
+      labels: { app: outbox-relay }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+    spec:
+      containers:
+        - name: outbox-relay
+          image: itinerario/itinerary-service:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.infrastructure.outbox_relay"]
+          ports: [{ containerPort: 9100, name: metrics }]
+          envFrom:
+            - configMapRef: { name: itinerario-config }
+          env:
+            - name: VAULT_TOKEN
+              valueFrom: { secretKeyRef: { name: itinerario-infra, key: ITINERARY_VAULT_TOKEN } }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 250m, memory: 192Mi }

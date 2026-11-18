@@ -1,0 +1,19 @@
+# kubectl apply -k k8s/base
+# (k8s/deploy.sh crea antes los ConfigMaps a partir de infra/postgres/init.sql
+#  e infra/vault/init.sh, para no duplicar esos archivos)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: itinerario
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: itinerario
+    includeSelectors: false
+resources:
+  - namespace.yaml
+  - config.yaml
+  - postgres.yaml
+  - redis-rabbitmq.yaml
+  - vault.yaml
+  - auth-gateway.yaml
+  - airport-service.yaml
+  - itinerary-service.yaml

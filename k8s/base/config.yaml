@@ -1,0 +1,38 @@
+# Configuración NO secreta compartida por los microservicios.
+# Los secretos de la aplicación (JWT_SECRET, URL de BD...) NO están aquí: los
+# entrega Vault en tiempo de ejecución. Aquí solo va cómo llegar a Vault.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: itinerario-config
+data:
+  VAULT_ADDR: http://vault:8200
+  API_COLOMBIA_URL: https://api-colombia.com
+  REDIS_URL: redis://redis:6379/0
+  AIRPORT_TRANSPORT: grpc
+  AIRPORT_GRPC_TARGET: airport-service:50051
+  GRPC_ALLOWED_CLIENTS: itinerary-service
+  CACHE_TTL_SECONDS: "3600"
+  CB_FAILURE_THRESHOLD: "5"
+  CB_RESET_TIMEOUT_SECONDS: "30"
+---
+# Credenciales de la INFRAESTRUCTURA (Postgres, RabbitMQ, tokens de Vault por servicio).
+# En un clúster real se crearían con External Secrets / Vault Agent Injector y no
+# se guardarían en git; aquí son valores de demostración.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: itinerario-infra
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: postgres
+  RABBITMQ_DEFAULT_USER: itinerario
+  RABBITMQ_DEFAULT_PASS: itinerario
+  ITINERARY_DB_USER: itinerary_user
+  ITINERARY_DB_PASSWORD: itinerary_pass
+  RABBITMQ_USER: itinerario
+  RABBITMQ_PASSWORD: itinerario
+  JWT_SECRET: cambia-este-secreto-en-produccion
+  AUTH_VAULT_TOKEN: auth-service-token
+  AIRPORT_VAULT_TOKEN: airport-service-token
+  ITINERARY_VAULT_TOKEN: itinerary-service-token

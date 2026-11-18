@@ -1,0 +1,66 @@
+# =============================================================================
+#  REGLAS DE ALERTA (Prometheus). Cada regla:
+#    expr  -> consulta PromQL; si devuelve algo, la alerta se activa
+#    for   -> cuánto tiempo debe mantenerse antes de disparar (evita falsas alarmas)
+#    labels.severity -> critical | warning (Alertmanager enruta según esto)
+#  Ver estado: http://localhost:9090/alerts   ·   Alertas enviadas: http://localhost:9093
+# =============================================================================
+groups:
+  - name: itinerario
+    rules:
+      - alert: ServicioCaido
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} no responde"
+          description: "Prometheus no logra leer las métricas de {{ $labels.job }} desde hace más de 30 s."
+
+      - alert: CircuitBreakerAbierto
+        expr: circuit_breaker_state == 2
+        for: 10s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker {{ $labels.circuit }} ABIERTO"
+          description: "API Colombia está fallando; el Airport Service responde desde la caché stale (modo degradado)."
+
+      - alert: MensajesEnDeadLetterQueue
+        expr: sum(rabbitmq_queue_messages{queue="notifications.dead-letter"}) > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hay {{ $value }} notificaciones en la DLQ"
+          description: "La Lambda SendNotificationFunction falló al procesar eventos. Revisar logs del notification-connector."
+
+      - alert: OutboxAtascado
+        expr: outbox_pending_messages > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} eventos sin publicar en el outbox"
+          description: "El outbox relay no está publicando en RabbitMQ (¿broker caído?)."
+
+      - alert: TasaDeErrores5xx
+        expr: |
+          sum by (service) (rate(http_requests_total{status=~"5.."}[2m]))
+            / sum by (service) (rate(http_requests_total[2m])) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }}: más del 5 % de respuestas 5xx"
+          description: "Tasa de errores del servidor = {{ $value | humanizePercentage }}."
+
+      - alert: LatenciaAlta
+        expr: |
+          histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }}: p95 de latencia > 1 s"
+          description: "El percentil 95 de latencia es {{ $value | humanizeDuration }}."

@@ -1,0 +1,33 @@
+# Prometheus: cada 15 s "raspa" (scrape) las métricas de cada componente y
+# evalúa las reglas de alerts.yml. Las alertas que se disparan van a Alertmanager.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: airport-service
+    static_configs:
+      - targets: ["airport-service:8000"]
+
+  - job_name: itinerary-service
+    static_configs:
+      - targets: ["itinerary-service:8000"]
+
+  - job_name: outbox-relay
+    static_configs:
+      - targets: ["outbox-relay:9100"]
+
+  # Plugin rabbitmq_prometheus (viene activo en la imagen oficial).
+  # /metrics/per-object da métricas por cola (necesario para vigilar la DLQ).
+  - job_name: rabbitmq
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: ["rabbitmq:15692"]

@@ -1,0 +1,58 @@
+%% Vista de despliegue - ambiente de desarrollo/pruebas con Docker Compose
+flowchart TB
+  dev(["💻 Equipo del desarrollador<br/><small>docker compose up -d --build</small>"])
+
+  subgraph host["Docker Desktop · red bridge itinerario-net · DNS interno 127.0.0.11"]
+    direction TB
+    subgraph pub["Puertos publicados al host"]
+      gw["gateway :8080"]
+      sw["Swagger :8001 · :8002 · :8003"]
+      tools["RabbitMQ :15672 · Jaeger :16686 · Vault :8200<br/>Prometheus :9090 · Alertmanager :9093 · Grafana :3000"]
+    end
+    subgraph apps["Contenedores de aplicación"]
+      auth["auth-service"]
+      air["airport-service<br/><small>:8000 + :50051</small>"]
+      iti["itinerary-service"]
+      rel["outbox-relay"]
+      con["notification-connector"]
+    end
+    subgraph infra["Contenedores de infraestructura"]
+      pg[("postgres:16<br/><small>volumen pgdata</small>")]
+      rd[("redis:7")]
+      mq{{"rabbitmq:3.13"}}
+      ls["localstack:3.8.1<br/><small>docker.sock → contenedor efímero de la Lambda</small>"]
+      va["vault:1.18 + vault-init<br/><small>contenedor de un solo uso</small>"]
+    end
+    subgraph mon["Observabilidad"]
+      ja["jaeger"]
+      pr["prometheus"]
+      am["alertmanager → alert-receiver"]
+      gr["grafana"]
+    end
+    subgraph perfiles["Perfiles opcionales"]
+      se["selenium (profile tests)"]
+      so["sonarqube (profile quality)"]
+    end
+  end
+
+  dev --> pub
+  gw --> apps
+  apps --> infra
+  apps -.-> mon
+
+  classDef svc fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef msg fill:#fef3c7,stroke:#b45309,color:#0f172a
+  classDef sec fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef obsc fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef fn fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef ext fill:#f3f4f6,stroke:#4b5563,color:#111827
+  classDef persona fill:#cffafe,stroke:#0e7490,color:#0f172a
+  class gw,sw,auth,air,iti,rel svc
+  class pg,rd data
+  class mq msg
+  class va sec
+  class ja,pr,am,gr obsc
+  class con,ls fn
+  class tools,se,so ext
+  class dev persona

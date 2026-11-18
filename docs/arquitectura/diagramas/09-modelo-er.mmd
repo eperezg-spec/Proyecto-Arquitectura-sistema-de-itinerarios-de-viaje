@@ -1,0 +1,34 @@
+%% Modelo entidad-relación: una base de datos por servicio (sin claves foráneas entre bases)
+erDiagram
+  direction LR
+  ITINERARIES {
+    uuid id PK
+    varchar_100 user_name "obligatorio"
+    int departure_airport_id "ID de API Colombia"
+    int arrival_airport_id "CHECK distinto de salida"
+    date travel_date
+    int duration_minutes "CHECK mayor que 0"
+    timestamptz created_at
+    timestamptz updated_at "nullable"
+  }
+  OUTBOX_MESSAGES {
+    uuid id PK "= event_id"
+    uuid aggregate_id "id del itinerario"
+    varchar_100 event_type "itinerary.created"
+    json payload "evento de integración"
+    json headers "traceparent W3C"
+    timestamptz occurred_at
+    timestamptz published_at "NULL = pendiente (índice)"
+  }
+  NOTIFICATIONS {
+    int id PK
+    uuid event_id UK "idempotencia"
+    uuid itinerary_id
+    varchar_100 recipient
+    varchar_30 channel "email-simulado"
+    text message
+    varchar_20 status "SENT"
+    timestamptz created_at
+  }
+  ITINERARIES ||--o{ OUTBOX_MESSAGES : "genera (misma transacción, itinerary_db)"
+  OUTBOX_MESSAGES ||--o| NOTIFICATIONS : "event_id viaja por RabbitMQ (notification_db)"

@@ -1,0 +1,81 @@
+%% Vista de implementación - componentes de alto nivel (C4 nivel 2)
+flowchart LR
+  user(["👤 Viajero<br/>navegador"])
+
+  subgraph borde["Borde"]
+    gw["🚪 API Gateway nginx<br/><small>frontend estático · ruteo<br/>rate limit 10 r/s · X-Request-ID</small>"]
+  end
+
+  subgraph servicios["Microservicios · Python 3.12 + FastAPI"]
+    auth["🔑 auth-service<br/><small>emite JWT HS256</small>"]
+    airport["✈️ airport-service<br/><small>REST :8000 · gRPC :50051<br/>Adapter · caché · circuit breaker</small>"]
+    itin["🗺️ itinerary-service<br/><small>CRUD · agregado Itinerary<br/>Transactional Outbox</small>"]
+    relay["📤 outbox-relay<br/><small>FOR UPDATE SKIP LOCKED<br/>publisher confirms</small>"]
+  end
+
+  subgraph datos["Datos"]
+    redis[("Redis<br/><small>caché fresh + stale</small>")]
+    pg[("PostgreSQL 16<br/><small>itinerary_db · notification_db</small>")]
+  end
+
+  subgraph mensajeria["Mensajería"]
+    mq{{"RabbitMQ<br/><small>exchange topic itinerary.events<br/>DLX + DLQ</small>"}}
+  end
+
+  subgraph serverless["Serverless"]
+    conn["🔌 notification-connector<br/><small>RabbitMQ → Lambda</small>"]
+    lambda["λ SendNotificationFunction<br/><small>LocalStack · idempotente</small>"]
+  end
+
+  subgraph seguridad["Seguridad"]
+    vault["🔐 HashiCorp Vault<br/><small>KV secretos · PKI CA mTLS</small>"]
+  end
+
+  subgraph obs["Observabilidad"]
+    jaeger["Jaeger<br/><small>trazas OTel</small>"]
+    prom["Prometheus<br/><small>métricas + 6 alertas</small>"]
+    am["Alertmanager"]
+    graf["Grafana"]
+  end
+
+  apicol[("🌐 API Colombia")]
+
+  user -->|HTTP| gw
+  gw -->|/auth| auth
+  gw -->|/api/v1/airports| airport
+  gw -->|/api/v1/itineraries| itin
+  itin == "gRPC + mTLS" ==> airport
+  airport -->|REST · timeout/retry| apicol
+  airport --> redis
+  itin -->|"itinerario + outbox<br/>1 transacción"| pg
+  relay -->|lee outbox| pg
+  relay -->|publica| mq
+  mq -->|cola notifications| conn
+  conn -->|invoke| lambda
+  lambda -->|INSERT ON CONFLICT| pg
+  airport -.->|cert mTLS| vault
+  itin -.->|secretos + cert| vault
+  prom -.->|scrape| itin
+  itin -.->|OTLP| jaeger
+  prom -->|alertas| am
+  graf -->|consulta| prom
+  nota["ℹ️ Todos los servicios leen sus secretos de Vault con un token propio,<br/>envían trazas a Jaeger y exponen /metrics a Prometheus"]
+
+  classDef svc fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef msg fill:#fef3c7,stroke:#b45309,color:#0f172a
+  classDef sec fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef obsc fill:#ede9fe,stroke:#6d28d9,color:#0f172a
+  classDef ext fill:#f3f4f6,stroke:#4b5563,color:#111827
+  classDef fn fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef persona fill:#cffafe,stroke:#0e7490,color:#0f172a
+  class gw,auth,airport,itin,relay svc
+  class redis,pg data
+  class mq msg
+  class vault sec
+  class jaeger,prom,am,graf obsc
+  class apicol ext
+  class conn,lambda fn
+  class user persona
+  classDef note fill:#fef9c3,stroke:#ca8a04,color:#0f172a,stroke-dasharray:4 3
+  class nota note

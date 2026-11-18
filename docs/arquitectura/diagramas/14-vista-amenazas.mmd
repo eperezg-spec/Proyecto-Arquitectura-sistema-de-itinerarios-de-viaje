@@ -1,0 +1,52 @@
+%% Vista de amenazas (STRIDE simplificado) con límites de confianza
+flowchart LR
+  atk(["🕵️ Atacante / cliente abusivo"])
+  user(["👤 Viajero"])
+
+  subgraph z0["Zona NO confiable · Internet"]
+    user
+    atk
+  end
+
+  subgraph z1["Límite 1 · Borde"]
+    gw["Gateway nginx<br/><small>D: rate limit 10 r/s → 429<br/>T: X-Request-ID para auditoría</small>"]
+  end
+
+  subgraph z2["Límite 2 · Red interna de servicios"]
+    auth["auth-service<br/><small>S: compare_digest · JWT exp 60 min</small>"]
+    itin["itinerary-service<br/><small>S: JWT obligatorio (401)<br/>T: validación Pydantic + invariantes<br/>R: logs JSON con trace_id</small>"]
+    air["airport-service<br/><small>E: gRPC solo para CN itinerary-service<br/>(PERMISSION_DENIED)</small>"]
+  end
+
+  subgraph z3["Límite 3 · Datos y secretos"]
+    vault["Vault<br/><small>I: secretos fuera del código<br/>E: políticas de mínimo privilegio (403)</small>"]
+    db[("PostgreSQL<br/><small>I: una BD y un usuario por servicio<br/>T: CHECK constraints</small>")]
+    mq{{"RabbitMQ<br/><small>R: DLQ conserva mensajes fallidos<br/>T: contrato AsyncAPI + Pact</small>"}}
+  end
+
+  ext[("API Colombia<br/><small>D: timeout + circuit breaker<br/>T: Adapter valida y corrige datos</small>")]
+
+  user --> gw
+  atk -->|"inundación / fuerza bruta"| gw
+  gw --> auth & itin & air
+  itin == "mTLS (I, S)" ==> air
+  itin --> db
+  itin -.-> vault
+  air -.-> vault
+  air --> ext
+  itin --> mq
+
+  classDef bad fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef good fill:#cffafe,stroke:#0e7490,color:#0f172a
+  classDef svc fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef sec fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef msg fill:#fef3c7,stroke:#b45309,color:#0f172a
+  classDef ext fill:#f3f4f6,stroke:#4b5563,color:#111827
+  class atk bad
+  class user good
+  class gw,auth,itin,air svc
+  class vault sec
+  class db data
+  class mq msg
+  class ext ext

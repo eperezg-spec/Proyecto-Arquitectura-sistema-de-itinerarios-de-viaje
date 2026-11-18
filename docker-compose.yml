@@ -11,11 +11,21 @@
 #    Swagger Auth ............... http://localhost:8003/docs
 #    RabbitMQ (itinerario/itinerario) http://localhost:15672
 #    Jaeger (trazas) ............ http://localhost:16686
+#    Vault (token: root) ........ http://localhost:8200
+#    Prometheus ................. http://localhost:9090   (alertas en /alerts)
+#    Alertmanager ............... http://localhost:9093
+#    Grafana (admin/admin) ...... http://localhost:3000   (dashboard "Itinerarios")
+#
+#  Pruebas web (Selenium):  docker compose --profile tests up -d selenium
 # =============================================================================
 name: itinerario
 
 x-otel: &otel
   OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+
+# Todos los servicios que leen secretos esperan a que Vault esté inicializado
+x-vault-ready: &vault-ready
+  vault-init: { condition: service_completed_successfully }
 
 services:
   # ---------------------------------------------------------------- Infra
@@ -25,7 +35,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"   # si el 5432 está ocupado: POSTGRES_PORT=5434 docker compose up -d
     volumes:
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
@@ -56,6 +66,38 @@ services:
   localstack:
     extends: { file: functions/docker-compose.yml, service: localstack }
 
+  # ---------------------------------------------------- Secretos (Vault)
+  vault:
+    image: hashicorp/vault:1.18.1
+    command: ["server", "-dev", "-dev-root-token-id=root", "-dev-listen-address=0.0.0.0:8200"]
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+    ports:
+      - "8200:8200"
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 3s
+      retries: 20
+
+  # Contenedor de un solo uso: crea la CA, los secretos y las políticas (infra/vault/init.sh)
+  vault-init:
+    image: hashicorp/vault:1.18.1
+    entrypoint: ["sh", "/scripts/init.sh"]
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: root
+      JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto-en-produccion}
+      ITINERARY_DB_USER: itinerary_user
+      ITINERARY_DB_PASSWORD: ${ITINERARY_DB_PASSWORD:-itinerary_pass}
+      RABBITMQ_USER: itinerario
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-itinerario}
+    volumes:
+      - ./infra/vault:/scripts:ro
+    depends_on:
+      vault: { condition: service_healthy }
+
+  # ------------------------------------------- Observabilidad y alertas
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
     environment:
@@ -63,25 +105,77 @@ services:
     ports:
       - "16686:16686"
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./infra/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+
+  # Simula el canal del equipo (Slack/correo): imprime las alertas en su log
+  alert-receiver:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/alert_receiver.py"]
+    volumes:
+      - ./infra/monitoring/alert_receiver.py:/app/alert_receiver.py:ro
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"   # el profesor puede ver el dashboard sin login
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus]
+
   # ------------------------------------------------------- Microservicios
+  # VAULT_ADDR + VAULT_TOKEN activan: secretos desde Vault y certificados mTLS para gRPC.
+  # Cada servicio tiene su propio token con una política de mínimo privilegio.
   auth-service:
     extends: { file: services/auth-service/docker-compose.yml, service: auth-service }
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: auth-service-token
+    depends_on: *vault-ready
 
   airport-service:
     extends: { file: services/airport-service/docker-compose.yml, service: airport-service }
-    environment: *otel
+    environment:
+      <<: *otel
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: airport-service-token
     depends_on:
+      <<: *vault-ready
       redis: { condition: service_healthy }
 
   itinerary-service:
     extends: { file: services/itinerary-service/docker-compose.yml, service: itinerary-service }
-    environment: *otel
+    environment:
+      <<: *otel
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: itinerary-service-token
     depends_on:
+      <<: *vault-ready
       postgres: { condition: service_healthy }
-      airport-service: { condition: service_started }
+      airport-service: { condition: service_healthy }
 
   outbox-relay:
     extends: { file: services/itinerary-service/docker-compose.yml, service: outbox-relay }
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: itinerary-service-token
     depends_on:
       itinerary-service: { condition: service_healthy } # espera a que corran las migraciones
       rabbitmq: { condition: service_healthy }
@@ -101,6 +195,17 @@ services:
       - auth-service
       - airport-service
       - itinerary-service
+
+  # -------------------------------------------- Pruebas web (perfil tests)
+  #   docker compose --profile tests up -d selenium   ->  pytest tests/web
+  #   Ver el navegador en vivo: http://localhost:7900 (contraseña: secret)
+  selenium:
+    image: selenium/standalone-chrome:4.27.0-20241204
+    profiles: ["tests"]
+    shm_size: 2gb
+    ports:
+      - "4444:4444"
+      - "7900:7900"
 
   # ------------------------------------------- Calidad (opcional, pesado)
   #   docker compose --profile quality up -d sonarqube   ->  http://localhost:9000

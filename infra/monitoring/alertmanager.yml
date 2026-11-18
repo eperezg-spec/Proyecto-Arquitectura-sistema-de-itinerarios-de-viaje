@@ -1,0 +1,20 @@
+# Alertmanager: agrupa, deduplica y ENRUTA las alertas que dispara Prometheus.
+# Aquí todas van a un webhook (alert-receiver) que las escribe en su log.
+# En un equipo real el receiver sería Slack, Teams, correo o PagerDuty:
+#   slack_configs: [{ api_url: ..., channel: "#itinerarios-alertas" }]
+route:
+  receiver: equipo-itinerarios
+  group_by: [alertname, service]
+  group_wait: 10s        # espera para agrupar alertas que llegan juntas
+  group_interval: 1m
+  repeat_interval: 1h    # no repetir la misma alerta más de una vez por hora
+  routes:
+    - matchers: [severity="critical"]
+      receiver: equipo-itinerarios
+      repeat_interval: 15m
+
+receivers:
+  - name: equipo-itinerarios
+    webhook_configs:
+      - url: http://alert-receiver:5001/alertas
+        send_resolved: true   # también avisa cuando el problema se resuelve

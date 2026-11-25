@@ -1,0 +1,4 @@
+# Dependencias para las pruebas de la Lambda (la Lambda en sí solo usa pg8000)
+pytest>=8.0
+pytest-cov>=5.0
+pact-python>=4.0

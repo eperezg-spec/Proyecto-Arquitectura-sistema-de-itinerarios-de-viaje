@@ -1,0 +1,7 @@
+# Finales de línea LF en todos los archivos de texto, también al clonar en Windows.
+# Sin esto, git (core.autocrlf) puede convertir los .sh a CRLF y los contenedores
+# fallan con errores como "set: illegal option -".
+* text=auto eol=lf
+*.sh text eol=lf
+*.docx binary
+*.png binary

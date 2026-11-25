@@ -1,0 +1,63 @@
+%% Componentes detallados - Itinerary Service (arquitectura hexagonal)
+flowchart LR
+  subgraph entrada["Adapter de ENTRADA"]
+    rest["routes.py<br/><small>REST CRUD · JWT<br/>201 · 204 · 404 · 422 · 503</small>"]
+  end
+
+  subgraph hex["Núcleo · sin frameworks"]
+    direction TB
+    subgraph app["Aplicación"]
+      uc["ItineraryService<br/><small>create · get · list · update · delete</small>"]
+      prepo{{"«puerto» ItineraryRepository"}}
+      pcheck{{"«puerto» AirportChecker"}}
+    end
+    subgraph dom["Dominio"]
+      agg["Itinerary<br/><small>raíz de agregado · invariantes</small>"]
+      ev["ItineraryCreated<br/><small>evento de dominio</small>"]
+    end
+  end
+
+  subgraph salida["Adapters de SALIDA"]
+    sql["SqlItineraryRepository<br/><small>itinerario + outbox en 1 transacción</small>"]
+    ie["integration_events<br/><small>evento de integración AsyncAPI v1</small>"]
+    grpcc["GrpcAirportChecker<br/><small>gRPC + mTLS · por defecto</small>"]
+    httpc["HttpAirportChecker<br/><small>REST + JWT · alternativo</small>"]
+  end
+
+  subgraph proc["Proceso aparte"]
+    relay["outbox_relay<br/><small>SKIP LOCKED · confirms · at-least-once</small>"]
+  end
+
+  pg[("PostgreSQL<br/>itinerary_db")]
+  airport["airport-service"]
+  mq{{"RabbitMQ"}}
+
+  rest --> uc
+  uc --> agg
+  agg -->|registra| ev
+  uc --> prepo
+  uc --> pcheck
+  prepo -. implementado por .- sql
+  pcheck -. AIRPORT_TRANSPORT=grpc .- grpcc
+  pcheck -. AIRPORT_TRANSPORT=http .- httpc
+  sql --> ie
+  sql --> pg
+  grpcc ==>|":50051"| airport
+  httpc -->|":8000"| airport
+  relay --> pg
+  relay --> mq
+
+  classDef inb fill:#cffafe,stroke:#0e7490,color:#0f172a
+  classDef core fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef portc fill:#fef9c3,stroke:#ca8a04,color:#0f172a
+  classDef outb fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef msg fill:#fef3c7,stroke:#b45309,color:#0f172a
+  classDef ext fill:#f3f4f6,stroke:#4b5563,color:#111827
+  class rest inb
+  class uc,agg,ev core
+  class prepo,pcheck portc
+  class sql,ie,grpcc,httpc,relay outb
+  class pg data
+  class mq msg
+  class airport ext

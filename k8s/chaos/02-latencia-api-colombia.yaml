@@ -1,0 +1,32 @@
+# =============================================================================
+#  EXPERIMENTO 2 (Chaos Mesh) - API Colombia lenta (latencia de red de 4 s)
+#
+#  Hipótesis: el timeout (3 s) corta las llamadas, el retry reintenta, tras 5
+#  fallos el circuit breaker se ABRE y el servicio responde rápido desde la
+#  copia stale de Redis. Prometheus dispara la alerta CircuitBreakerAbierto.
+#  Al terminar el experimento (2 min) el circuito vuelve a CERRADO solo.
+#
+#  Antes: invalidar la caché fresca para forzar llamadas a la API:
+#     curl -X DELETE http://localhost:30080/api/v1/airports/cache -H "Authorization: Bearer $TOKEN"
+#  Ejecutar:  kubectl apply -f k8s/chaos/02-latencia-api-colombia.yaml
+#  Observar:  kubectl logs -n itinerario -l app=airport-service -f | grep -i circuit
+# =============================================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: latencia-api-colombia
+  namespace: itinerario
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces: [itinerario]
+    labelSelectors:
+      app: airport-service
+  direction: to
+  externalTargets:
+    - api-colombia.com
+  delay:
+    latency: 4s
+    jitter: 500ms
+  duration: 2m

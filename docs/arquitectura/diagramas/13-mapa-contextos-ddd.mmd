@@ -1,0 +1,28 @@
+%% Mapa de contextos delimitados (DDD)
+flowchart LR
+  subgraph core["Dominio PRINCIPAL"]
+    plan["🗺️ Planificación de Viajes<br/><small>itinerary-service<br/>Agregado: Itinerary<br/>Lenguaje: itinerario, salida, llegada,<br/>duración, fecha de viaje</small>"]
+  end
+  subgraph supp["Dominio de SOPORTE"]
+    cat["✈️ Catálogo Aeroportuario<br/><small>airport-service<br/>Objeto de valor: Airport<br/>Lenguaje: aeropuerto, IATA, OACI,<br/>ciudad, departamento</small>"]
+    noti["📧 Notificaciones<br/><small>Lambda SendNotification<br/>Lenguaje: notificación, destinatario,<br/>canal, estado</small>"]
+  end
+  subgraph gen["Dominio GENÉRICO"]
+    idn["🔑 Identidad<br/><small>auth-service · JWT</small>"]
+  end
+  ext[("🌐 API Colombia<br/><small>sistema externo<br/>modelo ajeno: iataCode, deparmentId…</small>")]
+
+  plan -- "Cliente/Proveedor<br/>gRPC GetAirport · solo IDs" --> cat
+  cat -- "ACL / Anti-Corruption Layer<br/>Adapter + DTO" --> ext
+  plan -- "Publicador/Suscriptor<br/>ItineraryCreated v1 (AsyncAPI)<br/>contrato verificado con Pact" --> noti
+  plan -. "Conformista: valida JWT" .-> idn
+  cat -. "Conformista: valida JWT" .-> idn
+
+  classDef c1 fill:#dbeafe,stroke:#1d4ed8,stroke-width:3px,color:#0f172a
+  classDef c2 fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef c3 fill:#f3f4f6,stroke:#4b5563,color:#111827
+  classDef fn fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  class plan c1
+  class cat c2
+  class noti fn
+  class idn,ext c3

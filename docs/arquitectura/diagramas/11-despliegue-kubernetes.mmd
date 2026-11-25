@@ -1,0 +1,57 @@
+%% Vista de despliegue - Kubernetes (k8s/base) + Chaos Mesh (k8s/chaos)
+flowchart LR
+  user(["👤 Usuario"])
+
+  subgraph cluster["Clúster Kubernetes (k3s / kind / minikube / Docker Desktop)"]
+    direction LR
+    subgraph ns["namespace: itinerario"]
+      direction TB
+      gwsvc["Service gateway<br/><small>NodePort 30080</small>"]
+      gw["Deployment gateway ×1<br/><small>nginx · DNS kube-dns</small>"]
+      subgraph appz["Aplicación"]
+        air["Deployment airport-service ×2<br/><small>HPA 2–5 · CPU 70 %<br/>readiness / liveness /health</small>"]
+        iti["Deployment itinerary-service ×2<br/><small>HPA 2–5</small>"]
+        mig["Job itinerary-migrations<br/><small>alembic upgrade head</small>"]
+        rel["Deployment outbox-relay ×1"]
+        au["Deployment auth-service ×1"]
+      end
+      subgraph inf["Infraestructura"]
+        pg[("StatefulSet postgres<br/><small>PVC 1Gi</small>")]
+        rd[("Deployment redis")]
+        mq{{"Deployment rabbitmq"}}
+        va["Deployment vault + Job vault-init"]
+      end
+      cfg["ConfigMap itinerario-config<br/>Secret itinerario-infra"]
+    end
+    subgraph chaos["namespace: chaos-mesh"]
+      cm["Chaos Mesh<br/><small>controller + daemon</small>"]
+    end
+  end
+
+  user --> gwsvc --> gw
+  gw --> air & iti & au
+  iti == "gRPC mTLS" ==> air
+  iti --> pg
+  mig --> pg
+  rel --> pg
+  rel --> mq
+  air --> rd
+  appz -.-> va
+  cfg -.-> appz
+  cm -. "PodChaos: matar pod" .-> air
+  cm -. "NetworkChaos: latencia 4 s" .-> air
+  cm -. "NetworkChaos: partición" .-> rel
+
+  classDef svc fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef msg fill:#fef3c7,stroke:#b45309,color:#0f172a
+  classDef sec fill:#fee2e2,stroke:#b91c1c,color:#0f172a
+  classDef chaosc fill:#fce7f3,stroke:#be185d,color:#0f172a
+  classDef ext fill:#f3f4f6,stroke:#4b5563,color:#111827
+  classDef persona fill:#cffafe,stroke:#0e7490,color:#0f172a
+  class gwsvc,gw,air,iti,mig,rel,au svc
+  class pg,rd data
+  class mq msg
+  class va,cfg sec
+  class cm chaosc
+  class user persona

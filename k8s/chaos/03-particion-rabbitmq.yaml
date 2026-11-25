@@ -1,0 +1,33 @@
+# =============================================================================
+#  EXPERIMENTO 3 (Chaos Mesh) - Partición de red entre el outbox relay y RabbitMQ
+#
+#  Hipótesis (Transactional Outbox): aunque el broker sea inalcanzable, crear
+#  itinerarios SIGUE funcionando (el evento queda guardado en la tabla outbox en
+#  la misma transacción). Cuando la red vuelve, el relay publica todo lo
+#  pendiente y no se pierde ningún evento.
+#
+#  Ejecutar:  kubectl apply -f k8s/chaos/03-particion-rabbitmq.yaml
+#  Durante:   crear itinerarios -> responden 201
+#             la métrica outbox_pending_messages sube
+#  Después:   outbox_pending_messages vuelve a 0
+# =============================================================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: particion-relay-rabbitmq
+  namespace: itinerario
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces: [itinerario]
+    labelSelectors:
+      app: outbox-relay
+  direction: both
+  target:
+    mode: all
+    selector:
+      namespaces: [itinerario]
+      labelSelectors:
+        app: rabbitmq
+  duration: 2m

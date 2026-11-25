@@ -1,0 +1,76 @@
+# Auth Service (emite los JWT)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  labels: { app: auth-service }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: auth-service }
+  template:
+    metadata:
+      labels: { app: auth-service }
+    spec:
+      containers:
+        - name: auth-service
+          image: itinerario/auth-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8000, name: http }]
+          envFrom:
+            - configMapRef: { name: itinerario-config }
+          env:
+            - name: VAULT_TOKEN
+              valueFrom: { secretKeyRef: { name: itinerario-infra, key: AUTH_VAULT_TOKEN } }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 250m, memory: 192Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+spec:
+  selector: { app: auth-service }
+  ports: [{ port: 8000, name: http, targetPort: http }]
+---
+# API Gateway + frontend (imagen itinerario/gateway). Único punto expuesto fuera
+# del clúster: NodePort 30080 -> http://localhost:30080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels: { app: gateway }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: gateway }
+  template:
+    metadata:
+      labels: { app: gateway }
+    spec:
+      containers:
+        - name: gateway
+          image: itinerario/gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 80, name: http }]
+          env:
+            # nginx usa el DNS de Kubernetes y nombres completos de servicio
+            - { name: DNS_RESOLVER, value: kube-dns.kube-system.svc.cluster.local }
+            - { name: SERVICE_SUFFIX, value: .itinerario.svc.cluster.local }
+          readinessProbe:
+            httpGet: { path: /, port: http }
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  type: NodePort
+  selector: { app: gateway }
+  ports: [{ port: 80, targetPort: http, nodePort: 30080 }]

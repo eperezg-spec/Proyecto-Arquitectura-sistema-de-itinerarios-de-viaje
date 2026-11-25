@@ -1,0 +1,43 @@
+%% Transacción tipo A: crear itinerario (síncrono + asíncrono)
+sequenceDiagram
+  autonumber
+  actor U as Viajero
+  participant GW as Gateway
+  participant IT as itinerary-service
+  participant AP as airport-service
+  participant DB as itinerary_db
+  participant RL as outbox-relay
+  participant MQ as RabbitMQ
+  participant CN as notification-connector
+  participant L as Lambda SendNotification
+  participant NDB as notification_db
+
+  rect rgb(219, 234, 254)
+  Note over U,DB: Parte SÍNCRONA (el usuario espera)
+  U->>GW: POST /api/v1/itineraries (JWT)
+  GW->>IT: proxy
+  IT->>AP: gRPC GetAirport(salida) · mTLS
+  AP-->>IT: Airport / NOT_FOUND
+  IT->>AP: gRPC GetAirport(llegada) · mTLS
+  AP-->>IT: Airport
+  IT->>IT: Itinerary.create() valida invariantes<br/>y registra ItineraryCreated
+  IT->>DB: BEGIN · INSERT itineraries · INSERT outbox_messages · COMMIT
+  IT-->>U: 201 Created + Location
+  end
+
+  rect rgb(254, 243, 199)
+  Note over RL,NDB: Parte ASÍNCRONA (desacoplada, at-least-once)
+  RL->>DB: SELECT ... WHERE published_at IS NULL FOR UPDATE SKIP LOCKED
+  RL->>MQ: publish itinerary.created (persistente, message_id = event_id)
+  MQ-->>RL: confirm (publisher confirms)
+  RL->>DB: UPDATE published_at = now() · COMMIT
+  MQ->>CN: entrega (cola notifications.itinerary-created)
+  CN->>L: lambda.invoke(evento)
+  L->>NDB: INSERT ... ON CONFLICT (event_id) DO NOTHING
+  L-->>CN: {status: sent | duplicate}
+  alt Lambda OK
+    CN->>MQ: ack
+  else Lambda falla
+    CN->>MQ: nack(requeue=false) → DLX → notifications.dead-letter
+  end
+  end

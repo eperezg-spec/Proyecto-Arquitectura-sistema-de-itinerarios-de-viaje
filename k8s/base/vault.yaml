@@ -1,0 +1,67 @@
+# HashiCorp Vault en modo dev (demo) + Job que lo inicializa con infra/vault/init.sh
+# (el mismo script que usa docker-compose: CA interna, secretos y políticas).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: vault }
+  template:
+    metadata:
+      labels: { app: vault }
+    spec:
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.18.1
+          args: ["server", "-dev", "-dev-root-token-id=root", "-dev-listen-address=0.0.0.0:8200"]
+          ports: [{ containerPort: 8200 }]
+          env:
+            - { name: VAULT_ADDR, value: "http://127.0.0.1:8200" }
+          securityContext:
+            capabilities: { add: ["IPC_LOCK"] }
+          # Sonda HTTP con margen (timeout 3 s). Antes era `exec: vault status` con el
+          # timeout por defecto de 1 s: con el nodo cargado fallaba, Kubernetes sacaba
+          # a Vault del Service y los pods nuevos no podían arrancar (lo descubrió el
+          # experimento de Chaos Mesh 01-pod-kill-airport; ver docs/pruebas).
+          readinessProbe:
+            httpGet: { path: /v1/sys/health, port: 8200 }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+spec:
+  selector: { app: vault }
+  ports: [{ port: 8200 }]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-init
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: vault-init
+          image: hashicorp/vault:1.18.1
+          command: ["sh", "/scripts/init.sh"]
+          env:
+            - { name: VAULT_ADDR, value: "http://vault:8200" }
+            - { name: VAULT_TOKEN, value: root }
+          envFrom:
+            - secretRef: { name: itinerario-infra }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+      volumes:
+        - name: scripts
+          configMap: { name: vault-init-script }

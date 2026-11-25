@@ -1,0 +1,53 @@
+%% Componentes detallados - Airport Service (arquitectura hexagonal)
+flowchart LR
+  subgraph entrada["Adapters de ENTRADA · driving"]
+    rest["routes.py<br/><small>REST/JSON · JWT</small>"]
+    grpcs["grpc_server.py<br/><small>gRPC · mTLS · autorización por CN</small>"]
+  end
+
+  subgraph hex["Núcleo · sin frameworks"]
+    direction TB
+    subgraph app["Aplicación"]
+      uc["AirportService<br/><small>get_airport · list_airports<br/>get_map · invalidate_cache</small>"]
+      mapper["plotly_mapper<br/><small>dominio → figura Plotly</small>"]
+      port{{"«puerto» AirportProvider<br/><small>get_by_id · list_all</small>"}}
+    end
+    subgraph dom["Dominio"]
+      airportm["Airport<br/><small>objeto de valor inmutable</small>"]
+      exc["AirportNotFound<br/>AirportProviderUnavailable"]
+    end
+  end
+
+  subgraph salida["Adapters de SALIDA · driven · patrón Decorator"]
+    cache["CachedAirportProvider<br/><small>Redis fresh TTL + stale fallback</small>"]
+    adapter["ApiColombiaAirportAdapter<br/><small>DTO camelCase → Airport<br/>corrige lat/lon invertidas y 0,0</small>"]
+    cb["CircuitBreaker<br/><small>CLOSED → OPEN → HALF_OPEN</small>"]
+  end
+
+  redis[("Redis")]
+  api[("API Colombia")]
+
+  rest --> uc
+  grpcs --> uc
+  uc --> mapper
+  uc --> port
+  port -. implementado por .- cache
+  cache -->|miss| adapter
+  cache --> redis
+  adapter -->|"timeout 3 s · retry ×3<br/>backoff + jitter"| cb
+  cb --> api
+  uc --- airportm
+  adapter --- exc
+
+  classDef inb fill:#cffafe,stroke:#0e7490,color:#0f172a
+  classDef core fill:#dbeafe,stroke:#1d4ed8,color:#0f172a
+  classDef portc fill:#fef9c3,stroke:#ca8a04,color:#0f172a
+  classDef outb fill:#ffedd5,stroke:#c2410c,color:#0f172a
+  classDef data fill:#dcfce7,stroke:#15803d,color:#0f172a
+  classDef ext fill:#f3f4f6,stroke:#4b5563,color:#111827
+  class rest,grpcs inb
+  class uc,mapper,airportm,exc core
+  class port portc
+  class cache,adapter,cb outb
+  class redis data
+  class api ext

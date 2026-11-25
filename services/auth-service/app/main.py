@@ -14,7 +14,10 @@ import jwt
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
-JWT_SECRET = os.getenv("JWT_SECRET", "cambia-este-secreto-en-produccion")
+from app.vault import get_secret
+
+# Con Vault se lee de secret/itinerario/jwt (el mismo que usan los demás servicios).
+JWT_SECRET = get_secret("itinerario/jwt", "secret", env_var="JWT_SECRET", default="cambia-este-secreto-en-produccion")
 JWT_ALGORITHM = "HS256"
 TOKEN_MINUTES = int(os.getenv("TOKEN_MINUTES", "60"))
 

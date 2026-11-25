@@ -8,14 +8,19 @@ services:
     build: .
     image: itinerario/airport-service:latest
     ports:
-      - "8001:8000"
+      - "8001:8000"    # REST (Swagger en /docs)
+      - "50051:50051"  # gRPC interno (mTLS cuando hay Vault)
     environment:
       API_COLOMBIA_URL: ${API_COLOMBIA_URL:-https://api-colombia.com}
       REDIS_URL: redis://redis:6379/0
       CACHE_TTL_SECONDS: "3600"
       CB_FAILURE_THRESHOLD: "5"
       CB_RESET_TIMEOUT_SECONDS: "30"
+      # Sin Vault (este compose solo) se usa JWT_SECRET y gRPC sin TLS.
+      # El compose de la raíz agrega VAULT_ADDR/VAULT_TOKEN -> secretos y mTLS desde Vault.
       JWT_SECRET: ${JWT_SECRET:-cambia-este-secreto-en-produccion}
+      GRPC_PORT: "50051"
+      GRPC_ALLOWED_CLIENTS: itinerary-service
     restart: on-failure
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

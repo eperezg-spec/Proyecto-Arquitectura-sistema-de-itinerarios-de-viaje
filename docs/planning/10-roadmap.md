@@ -46,11 +46,23 @@ flowchart LR
 - [ ] README/ADR/diagramas actualizados si aplica.
 - [ ] Issue de Jira en `Done`.
 
-## Reparto sugerido (equipo de 3–4)
+## Reparto del equipo (2 integrantes)
 
-| Rol | Foco |
-|---|---|
-| Dev A | Airport Service, resiliencia, caché, Toxiproxy |
-| Dev B | Itinerary Service, outbox, Pact |
-| Dev C | Serverless (LocalStack, conector, Lambdas), RabbitMQ, AsyncAPI |
-| Dev D / compartido | Gateway, auth, frontend, observabilidad, CI/CD, Sonar, documentación |
+El equipo son **dos personas**: **Elizabeth Pérez González** y **María Fernanda Ceballos**. Cada una es dueña de un contexto delimitado (un microservicio de punta a punta), y lo transversal se reparte según afinidad. El detalle por issue, con estado, prioridad y fechas, está en [docs/gestion/jira.md](../gestion/jira.md) y [docs/gestion/estado-jira.md](../gestion/estado-jira.md). La fuente de esos datos es `jira/backlog.csv`.
+
+| Sprint | Elizabeth Pérez González | María Fernanda Ceballos | Compartido |
+|---|---|---|---|
+| **S0 — Setup** | docker-compose por servicio | Jira, pipeline CI | Repositorio, ramas, plantilla de PR |
+| **S1 — Airport** | Adapter API Colombia, corrección de coordenadas, mapa Plotly | — | — |
+| **S2 — Itinerary** | — | Agregado Itinerary, CRUD, migraciones | — |
+| **S3 — Resiliencia y gateway** | Caché Redis, retry, circuit breaker, gateway nginx, Auth JWT, frontend | — | — |
+| **S4 — Eventos y serverless** | — | Outbox + relay, RabbitMQ + AsyncAPI, Lambda + conector | — |
+| **S5 — Observabilidad** | — | Logs JSON, Jaeger, SonarQube | Swagger, revisión en clase |
+| **S6 — Nivel 3 + pruebas (correcciones)** | gRPC, mTLS, Vault, Kubernetes, Chaos Mesh, Selenium, documento de arquitectura | Pact, Prometheus + alertas + Grafana, pruebas de eventos, Testcontainers, Locust, README, DevOps, Jira | Informe de pruebas (rama `pruebas`) |
+| **S7 — Cierre** | Mejora del circuit breaker (hallazgo de caos) | — | Sustentación final |
+
+| Integrante | Issues asignados | Foco |
+|---|---|---|
+| Elizabeth Pérez González | 17 | Airport Service, resiliencia, gateway, seguridad (JWT, gRPC/mTLS, Vault), Kubernetes, caos, Selenium, arquitectura |
+| María Fernanda Ceballos | 18 | Itinerary Service, eventos, outbox, serverless, Pact, observabilidad y alertas, CI/CD, pruebas de eventos y carga, DevOps, Jira |
+| Compartido | 6 | Repositorio, Swagger, informe de pruebas, roadmap, sustentación |

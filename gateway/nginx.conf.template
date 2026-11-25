@@ -4,6 +4,12 @@
 #  - Propaga el header Authorization (JWT) y un X-Request-ID
 #  - Sirve el frontend estático
 #  - NO tiene lógica de negocio
+#
+# Es una PLANTILLA: al arrancar, la imagen oficial de nginx reemplaza las
+# variables de entorno ${DNS_RESOLVER} y ${SERVICE_SUFFIX}. Así la misma imagen
+# sirve en Docker Compose y en Kubernetes:
+#   Compose:    DNS_RESOLVER=127.0.0.11                               SERVICE_SUFFIX=""
+#   Kubernetes: DNS_RESOLVER=kube-dns.kube-system.svc.cluster.local   SERVICE_SUFFIX=.itinerario.svc.cluster.local
 
 limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
 limit_req_status 429;
@@ -11,13 +17,13 @@ limit_req_status 429;
 server {
     listen 80;
 
-    # DNS interno de Docker. Usar variables en proxy_pass obliga a nginx a
-    # resolver el nombre en cada petición: si un servicio se reinicia y cambia
-    # de IP, el gateway lo sigue encontrando (sin esto daría 502).
-    resolver 127.0.0.11 valid=10s ipv6=off;
-    set $auth_service      http://auth-service:8000;
-    set $airport_service   http://airport-service:8000;
-    set $itinerary_service http://itinerary-service:8000;
+    # DNS interno (Docker o Kubernetes). Usar variables en proxy_pass obliga a
+    # nginx a resolver el nombre en cada petición: si un servicio se reinicia y
+    # cambia de IP, el gateway lo sigue encontrando (sin esto daría 502).
+    resolver ${DNS_RESOLVER} valid=10s ipv6=off;
+    set $auth_service      http://auth-service${SERVICE_SUFFIX}:8000;
+    set $airport_service   http://airport-service${SERVICE_SUFFIX}:8000;
+    set $itinerary_service http://itinerary-service${SERVICE_SUFFIX}:8000;
 
     # nginx pasa "Authorization" automáticamente; añadimos info útil para trazabilidad
     proxy_set_header Host $host;

@@ -1,0 +1,27 @@
+%% Autenticación (JWT) y propagación de identidad
+sequenceDiagram
+  autonumber
+  actor U as Viajero (navegador)
+  participant GW as API Gateway (nginx)
+  participant AU as auth-service
+  participant V as Vault
+  participant IT as itinerary-service
+  participant AP as airport-service
+
+  Note over AU,AP: Al arrancar, cada servicio lee JWT_SECRET de Vault (secret/itinerario/jwt)<br/>con su propio token y política de solo lectura
+  AU->>V: GET secret/itinerario/jwt
+  V-->>AU: secret
+  U->>GW: POST /auth/token {usuario, contraseña}
+  GW->>AU: proxy (rate limit 10 r/s, X-Request-ID)
+  AU->>AU: compare_digest(contraseña)<br/>firma JWT HS256 (sub, iat, exp 60 min)
+  AU-->>GW: 200 {access_token}
+  GW-->>U: 200 {access_token} (sessionStorage)
+  U->>GW: GET /api/v1/itineraries<br/>Authorization: Bearer JWT
+  GW->>IT: proxy + Authorization
+  IT->>IT: require_user(): valida firma y expiración
+  alt token ausente, inválido o expirado
+    IT-->>U: 401 {status, title, detail}
+  else token válido
+    IT-->>U: 200 [itinerarios]
+  end
+  Note over IT,AP: Servicio a servicio: identidad del SERVICIO con mTLS (gRPC)<br/>(alternativa HTTP: se propaga el JWT del usuario)
